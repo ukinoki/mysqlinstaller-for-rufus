@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QProcess>
 #include <QEventLoop>
 #include <QTimer>
@@ -13,15 +14,179 @@
 #include <QRegularExpression>
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Helpers d'exécution dépendants de la plateforme (déclarés tôt : utilisés par
+//  de nombreuses méthodes plus bas).
+// ─────────────────────────────────────────────────────────────────────────────
+static inline QString shellProgram()
+{
+#if defined(Q_OS_WIN)
+    return "cmd.exe";
+#else
+    return "/bin/bash";
+#endif
+}
+
+static inline QStringList shellArgs(const QString& cmd)
+{
+#if defined(Q_OS_WIN)
+    return QStringList{"/C", cmd};
+#else
+    return QStringList{"-c", cmd};
+#endif
+}
+
+//  Redirection « rien » pour masquer stderr selon la plateforme.
+static inline QString NUL()
+{
+#if defined(Q_OS_WIN)
+    return "2>nul";
+#else
+    return "2>/dev/null";
+#endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 AppController::AppController(QObject* parent)
     : QObject(parent)
 {}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Multi-plateforme : dossier partagé
+// ─────────────────────────────────────────────────────────────────────────────
+QString AppController::sharedFolderPath()
+{
+#if defined(Q_OS_WIN)
+    return "C:/Users/Public";   // slashes avant : acceptés par Qt et MySQL sous Windows
+#else
+    return "/Users/Shared";
+#endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Pré-requis : droits administrateur
+// ─────────────────────────────────────────────────────────────────────────────
+bool AppController::isAdminUser()
+{
+#if defined(Q_OS_WIN)
+    // Le processus est-il élevé (membre du rôle Administrateurs) ?
+    const QString out = runCmd(
+        "powershell -NoProfile -Command "
+        "\"[bool]([Security.Principal.WindowsPrincipal]"
+        "[Security.Principal.WindowsIdentity]::GetCurrent())"
+        ".IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)\"");
+    return out.trimmed().compare("True", Qt::CaseInsensitive) == 0;
+#elif defined(Q_OS_LINUX)
+    // root, ou membre du groupe « sudo » (Ubuntu) / « admin ».
+    if (runCmd("id -u 2>/dev/null").trimmed() == "0")
+        return true;
+    const QStringList groups =
+        runCmd("id -Gn 2>/dev/null").split(QRegularExpression("\\s+"),
+                                           Qt::SkipEmptyParts);
+    return groups.contains("sudo") || groups.contains("admin");
+#else
+    // Les administrateurs macOS sont membres du groupe « admin » (gid 80).
+    const QStringList groups =
+        runCmd("id -Gn 2>/dev/null").split(QRegularExpression("\\s+"),
+                                           Qt::SkipEmptyParts);
+    return groups.contains("admin");
+#endif
+}
+
+#if defined(Q_OS_LINUX)
+//  Ubuntu strictement supérieur à 22.04 (selon /etc/os-release).
+bool AppController::isUbuntuVersionSupported()
+{
+    const QString ver =
+        runCmd(". /etc/os-release 2>/dev/null; echo $VERSION_ID").trimmed();
+    const QStringList p = ver.split('.');
+    if (p.size() < 2)
+        return false;
+    const int major = p[0].toInt();
+    const int minor = p[1].toInt();
+    return (major > 22) || (major == 22 && minor > 4);
+}
+#endif
+
+#if defined(Q_OS_WIN)
+// ─────────────────────────────────────────────────────────────────────────────
+//  Windows : Visual C++ Redistributable 2022 (x64)
+// ─────────────────────────────────────────────────────────────────────────────
+bool AppController::isVCRedist2022Installed()
+{
+    // Clé posée par le runtime VC++ 14.x (2015-2022, binairement compatibles).
+    const QString out = runCmd(
+        "reg query "
+        "\"HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64\" "
+        "/v Installed 2>nul");
+    return out.contains("0x1");
+}
+
+bool AppController::installVCRedist2022()
+{
+    const QString url = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
+    const QString exe = QDir::tempPath() + "/vc_redist.x64.exe";
+
+    runLongOp(QString("curl -L -o \"%1\" \"%2\"").arg(exe, url),
+              tr("Téléchargement de Visual C++ Redistributable 2022…"), 600000);
+    if (!QFile::exists(exe))
+        return false;
+
+    runLongOp(QString("\"%1\" /install /quiet /norestart").arg(exe),
+              tr("Installation de Visual C++ Redistributable 2022…"), 300000);
+    QFile::remove(exe);
+    return isVCRedist2022Installed();
+}
+#endif  // Q_OS_WIN
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  run() : phase 1 — MySQL, puis affichage du dialogue
 // ═════════════════════════════════════════════════════════════════════════════
 void AppController::run()
 {
+    // Le programme installe MySQL et modifie des emplacements système (my.cnf /
+    // my.ini, partage, PATH, service). Il exige donc des droits administrateur.
+    // Sur macOS : compte membre du groupe « admin » (élévation par osascript au
+    // besoin). Sur Windows : processus lancé en tant qu'administrateur.
+    if (!isAdminUser()) {
+        QMessageBox::critical(nullptr,
+            tr("Droits administrateur requis"),
+#if defined(Q_OS_WIN)
+            tr("Ce programme doit être exécuté en tant qu'administrateur.\n\n"
+               "Faites un clic droit sur l'application puis « Exécuter en tant "
+               "qu'administrateur », et relancez."));
+#else
+            tr("Ce programme doit être lancé par un utilisateur administrateur de macOS.\n\n"
+               "Connectez-vous avec un compte administrateur (ou demandez à un "
+               "administrateur de l'exécuter), puis relancez."));
+#endif
+        qApp->quit();
+        return;
+    }
+
+#if defined(Q_OS_WIN)
+    // Windows : MySQL dépend de Visual C++ Redistributable 2022. On le vérifie et
+    // on l'installe AVANT toute opération MySQL.
+    if (!isVCRedist2022Installed()) {
+        if (!installVCRedist2022()) {
+            QMessageBox::critical(nullptr,
+                tr("Visual C++ Redistributable requis"),
+                tr("L'installation de Microsoft Visual C++ Redistributable 2022 a "
+                   "échoué.\nVérifiez votre connexion Internet et relancez."));
+            qApp->quit();
+            return;
+        }
+    }
+#elif defined(Q_OS_LINUX)
+    // Linux : ce programme cible Ubuntu (> 22.04).
+    if (!isUbuntuVersionSupported()) {
+        QMessageBox::critical(nullptr,
+            tr("Version d'Ubuntu non compatible"),
+            tr("Ce programme nécessite Ubuntu dans une version supérieure à 22.04."));
+        qApp->quit();
+        return;
+    }
+#endif
+
     bool installed = isMySQLInstalled();
     bool mysqlOk   = false;
 
@@ -79,7 +244,7 @@ void AppController::onCredentialsAccepted()
     m_dialog->uncheckAllSteps();
     m_dialog->clearError();
 
-    // ── Case 1 : MySQL 8.4.3 présent ──────────────────────────────────────
+    // ── Étape 1 : MySQL 8.4.3 présent ─────────────────────────────────────
     if (!isMySQLInstalled() || getMySQLVersion() != "8.4.3") {
         m_dialog->setError(tr("MySQL 8.4.3 n'est pas détecté sur ce système."));
         m_dialog->setInputsEnabled(true);
@@ -87,37 +252,84 @@ void AppController::onCredentialsAccepted()
     }
     m_dialog->checkStep(0);
 
-    // ── Case 2 : accès complet au disque pour mysqld ───────────────────────
-    if (!checkFullDiskAccess()) {
+    if (!isServerRunning()) startMySQL();
+
+    // ── Étape 2 : le chemin de mysql est dans la variable d'environnement PATH ─
+    if (!ensureMysqlInPath()) {
         m_dialog->setError(
-            tr("Impossible d'accorder l'accès complet au disque à mysqld."));
+            tr("Impossible d'ajouter le chemin de mysql à la variable PATH."));
         m_dialog->setInputsEnabled(true);
         return;
     }
     m_dialog->checkStep(1);
 
-    // ── Case 3 : connexion utilisateur valide ──────────────────────────────
-    if (m_freshInstall) {
-        if (!createUser()) {
-            m_dialog->setError(
-                tr("Impossible de créer l'utilisateur '%1'.").arg(m_login));
-            m_dialog->setInputsEnabled(true);
-            return;
-        }
+    // Installation neuve : créer l'utilisateur tout de suite — les étapes
+    // suivantes (secure_file_priv, test lecture/écriture) ont besoin d'une
+    // connexion valide.
+    if (m_freshInstall && !createUser()) {
+        m_dialog->setError(tr("Impossible de créer l'utilisateur '%1'.").arg(m_login));
+        m_dialog->setInputsEnabled(true);
+        return;
     }
 
-    if (!isServerRunning()) startMySQL();
-
-    if (!tryConnect()) {
+    // ── Étape 3 : le dossier partagé existe et est partagé ────────────────
+    if (!setupSharedFolder()) {
         m_dialog->setError(
-            tr("Connexion impossible avec le login « %1 ».\n"
-               "Vérifiez le login et le mot de passe.").arg(m_login));
+            tr("Impossible de créer ou de partager le dossier %1.")
+            .arg(sharedFolderPath()));
         m_dialog->setInputsEnabled(true);
         return;
     }
     m_dialog->checkStep(2);
 
-    // ── Case 4 : privilèges ALL + GRANT OPTION ─────────────────────────────
+    // ── Étape 4 : secure_file_priv pointe sur le dossier partagé ──────────
+    if (!ensureSecureFilePriv()) {
+        m_dialog->setError(
+            tr("Impossible de configurer secure_file_priv sur %1.")
+            .arg(sharedFolderPath()));
+        m_dialog->setInputsEnabled(true);
+        return;
+    }
+    m_dialog->checkStep(3);
+
+    // ── Étape 5 : mysql lit et écrit dans le dossier (fichier test) ───────
+    //  En cas d'échec : soit le login/mot de passe est faux (connexion refusée),
+    //  soit (macOS) mysqld n'a pas l'« Accès complet au disque ». On distingue
+    //  les deux cas.
+    while (!testSharedFolderRW()) {
+        if (!tryConnect()) {
+            m_dialog->setError(
+                tr("Connexion impossible avec le login « %1 ».\n"
+                   "Vérifiez le login et le mot de passe.").arg(m_login));
+            m_dialog->setInputsEnabled(true);
+            return;
+        }
+#if defined(Q_OS_MACOS)
+        // macOS : l'échec vient en général de l'absence de « Full Disk Access ».
+        if (!guideMysqldFullDiskAccess()) {
+            m_dialog->setError(
+                tr("mysql ne parvient pas à écrire dans %1.\n"
+                   "Accordez l'accès complet au disque à mysqld, ou vérifiez le "
+                   "privilège FILE de « %2 ».").arg(sharedFolderPath(), m_login));
+            m_dialog->setInputsEnabled(true);
+            return;
+        }
+        restartMySQL();   // appliquer l'accès nouvellement accordé au démon
+#else
+        // Windows / Linux : pas de notion de « Full Disk Access ».
+        m_dialog->setError(
+            tr("mysql ne parvient pas à écrire dans %1.\n"
+               "Vérifiez les droits du dossier et le privilège FILE de « %2 ».")
+            .arg(sharedFolderPath(), m_login));
+        m_dialog->setInputsEnabled(true);
+        return;
+#endif
+    }
+    m_dialog->checkStep(4);
+
+    // ── Étape 6 : privilèges ALL + GRANT OPTION ───────────────────────────
+    //  (Pas de test « utilisateur valide » séparé : une connexion réussie aux
+    //  étapes précédentes prouve déjà que le couple login/mot de passe est bon.)
     QStringList missing;
     if (!checkPrivileges(missing)) {
         m_dialog->setError(
@@ -127,25 +339,7 @@ void AppController::onCredentialsAccepted()
         m_dialog->setInputsEnabled(true);
         return;
     }
-    m_dialog->checkStep(3);
-
-    // ── Case 5 : /Users/Shared partagé ────────────────────────────────────
-    if (!setupSharedFolder()) {
-        m_dialog->setError(
-            tr("Impossible de créer ou de partager /Users/Shared."));
-        m_dialog->setInputsEnabled(true);
-        return;
-    }
-    m_dialog->checkStep(4);
-
-    // ── Case 6 : variables MySQL conformes ────────────────────────────────
-    if (!checkAndFixVariables()) {
-        m_dialog->setError(
-            tr("Les variables secure_file_priv ou sql_mode ne sont pas conformes."));
-        m_dialog->setInputsEnabled(true);
-        return;
-    }
-    m_dialog->checkStep(4);
+    m_dialog->checkStep(5);
 
     // ── Succès : boîte de dialogue modale sur le dialogue principal ────────
     // Le programme reste ouvert tant que l'utilisateur n'a pas cliqué OK.
@@ -163,6 +357,17 @@ void AppController::onCredentialsAccepted()
 // ─────────────────────────────────────────────────────────────────────────────
 bool AppController::isMySQLInstalled()
 {
+#if defined(Q_OS_WIN)
+    if (!oraclePrefix().isEmpty())
+        return true;
+    if (runCmd("sc query MySQL " + NUL()).contains("SERVICE_NAME", Qt::CaseInsensitive))
+        return true;
+    return runCmd("mysql --version " + NUL()).contains("mysql", Qt::CaseInsensitive);
+#elif defined(Q_OS_LINUX)
+    if (runCmd("dpkg -s mysql-server " + NUL()).contains("Status: install ok"))
+        return true;
+    return runCmd("mysql --version " + NUL()).contains("mysql", Qt::CaseInsensitive);
+#else
     QString brewList = runCmd("brew list --formula 2>/dev/null");
     if (brewList.contains(QRegularExpression("\\bmysql(@8\\.4)?\\b")))
         return true;
@@ -170,6 +375,7 @@ bool AppController::isMySQLInstalled()
         return true;
     QString ver = runCmd("mysql --version 2>/dev/null");
     return ver.contains("mysql", Qt::CaseInsensitive);
+#endif
 }
 
 bool AppController::isOracleInstall()
@@ -177,16 +383,100 @@ bool AppController::isOracleInstall()
     return !oraclePrefix().isEmpty();
 }
 
+//  Vérifie que le dossier de l'exécutable mysql figure dans la variable PATH.
+//  Sinon l'y ajoute de façon persistante (écriture privilégiée ; admin requis).
+//   • macOS   : /etc/paths.d/mysql (lu par path_helper au démarrage des shells).
+//   • Windows : PATH « Machine » (registre système), via PowerShell.
+bool AppController::ensureMysqlInPath()
+{
+    // mysqlBin() peut renvoyer un nom nu (« mysql ») si l'exécutable est dans le
+    // PATH : on résout alors son chemin complet pour en déduire le dossier.
+    QString mysqlPath = mysqlBin("mysql");
+    if (!QDir::isAbsolutePath(mysqlPath)) {
+#if defined(Q_OS_WIN)
+        mysqlPath = runCmd("where mysql " + NUL())
+                        .split('\n', Qt::SkipEmptyParts).value(0).trimmed();
+#else
+        mysqlPath = runCmd("command -v mysql " + NUL()).trimmed();
+#endif
+    }
+    const QString binDir = QFileInfo(mysqlPath).absolutePath();
+    if (binDir.isEmpty() || binDir == ".")
+        return false;
+
+#if defined(Q_OS_WIN)
+    const QString winBin = QString(binDir).replace('/', '\\');
+    auto inMachinePath = [this, &binDir, &winBin]() {
+        const QString path = runCmd("powershell -NoProfile -Command "
+            "\"[Environment]::GetEnvironmentVariable('Path','Machine')\"");
+        return path.contains(winBin, Qt::CaseInsensitive)
+            || path.contains(binDir, Qt::CaseInsensitive);
+    };
+    if (inMachinePath())
+        return true;
+
+    runCmdElevated(QString("powershell -NoProfile -Command "
+        "\"[Environment]::SetEnvironmentVariable('Path',"
+        "[Environment]::GetEnvironmentVariable('Path','Machine')+';%1','Machine')\"")
+        .arg(winBin));
+    return inMachinePath();
+#elif defined(Q_OS_LINUX)
+    // Sous Ubuntu, apt installe mysql dans /usr/bin (déjà dans le PATH). Au cas
+    // où, on persiste via /etc/profile.d/mysql.sh.
+    auto inLoginPath = [this, &binDir]() {
+        const QStringList dirs =
+            runCmd("bash -lc 'echo $PATH' 2>/dev/null").split(':', Qt::SkipEmptyParts);
+        return dirs.contains(binDir);
+    };
+    if (inLoginPath())
+        return true;
+
+    runCmdElevated(QString(
+        "printf 'export PATH=\"%1:$PATH\"\\n' > /etc/profile.d/mysql.sh && "
+        "chmod 644 /etc/profile.d/mysql.sh").arg(binDir));
+    return inLoginPath();
+#else
+    auto inLoginPath = [this, &binDir]() {
+        const QStringList dirs =
+            runCmd("zsh -lc 'echo $PATH' 2>/dev/null").split(':', Qt::SkipEmptyParts);
+        return dirs.contains(binDir);
+    };
+    if (inLoginPath())
+        return true;
+
+    const QString tmp = QDir::tempPath() + "/mysql.path";
+    QFile f(tmp);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+    { QTextStream ts(&f); ts << binDir << '\n'; }
+    f.close();
+
+    runCmdElevated(QString("cp '%1' /etc/paths.d/mysql && chmod 644 /etc/paths.d/mysql")
+                   .arg(tmp));
+    QFile::remove(tmp);
+    return inLoginPath();
+#endif
+}
+
 QString AppController::oraclePrefix() const
 {
+#if defined(Q_OS_WIN)
+    // Emplacement par défaut de l'installation MySQL 8.4 sous Windows.
+    for (const QString& p : {QString("C:/Program Files/MySQL/MySQL Server 8.4"),
+                             QString("C:/Program Files/MySQL/MySQL Server 8.0")})
+        if (QFile::exists(p + "/bin/mysql.exe"))
+            return p;
+    return {};
+#else
     if (QFile::exists("/usr/local/mysql/bin/mysql"))
         return "/usr/local/mysql";
     return {};
+#endif
 }
 
 QString AppController::getMySQLVersion()
 {
-    QString out = runCmd(mysqlBin("mysql") + " --version 2>/dev/null");
+    QString out = runCmd("\"" + mysqlBin("mysql") + "\" --version " + NUL());
     QRegularExpression re(R"(Distrib\s+([\d.]+))");
     auto m = re.match(out);
     if (m.hasMatch()) return m.captured(1);
@@ -278,26 +568,63 @@ bool AppController::installFromDmg(const QString& dmgPath)
 
 bool AppController::installMySQL()
 {
+#if defined(Q_OS_WIN)
+    const QString url = "https://dev.mysql.com/get/Downloads/MySQL-8.4/"
+                        "mysql-8.4.3-winx64.msi";
+    const QString msi = QDir::tempPath() + "/mysql-8.4.3-winx64.msi";
+
+    runLongOp(QString("curl -fSL -o \"%1\" \"%2\"").arg(msi, url),
+              tr("Téléchargement de MySQL 8.4.3 (Windows)…"), 600000);
+    if (!QFile::exists(msi))
+        return false;
+
+    // Installation silencieuse (l'application est déjà élevée).
+    runLongOp(QString("msiexec /i \"%1\" /quiet /norestart").arg(msi),
+              tr("Installation de MySQL 8.4.3…"), 600000);
+    QFile::remove(msi);
+
+    // À VALIDER côté Windows : selon le paquet, l'initialisation du datadir et
+    // l'enregistrement du service (« mysqld --initialize-insecure » puis
+    // « mysqld --install MySQL --defaults-file=my.ini ») peuvent être requis ici.
+    return isMySQLInstalled();
+#elif defined(Q_OS_LINUX)
+    // Installation via apt-get (droits root → pkexec, avec dialogue de progression).
+    runLongOp(
+        "pkexec sh -c 'apt-get update && DEBIAN_FRONTEND=noninteractive "
+        "apt-get install -y mysql-server'",
+        tr("Installation de MySQL via apt-get…"), 900000);
+    return isMySQLInstalled();
+#else
     QString dmg = downloadOracleDmg();
     if (dmg.isEmpty()) return false;
     return installFromDmg(dmg);
+#endif
 }
 
 bool AppController::upgradeMySQL()
 {
     stopMySQL();
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+    return installMySQL();
+#else
     QString dmg = downloadOracleDmg();
     if (dmg.isEmpty()) return false;
     return installFromDmg(dmg);
+#endif
 }
 
 bool AppController::startMySQL()
 {
     QString bin = mysqlBin("mysqladmin");
-    if (runCmdFull(QString("'%1' -u root ping 2>/dev/null").arg(bin))
+    if (runCmdFull(QString("\"%1\" -u root ping ").arg(bin) + NUL())
             .contains("mysqld is alive"))
         return true;
 
+#if defined(Q_OS_WIN)
+    runCmdElevated("net start MySQL");
+#elif defined(Q_OS_LINUX)
+    runCmdElevated("systemctl start mysql");
+#else
     if (isOracleInstall()) {
         QString plist = "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist";
         if (QFile::exists(plist))
@@ -307,15 +634,21 @@ bool AppController::startMySQL()
     } else {
         runCmdFull("brew services start mysql@8.4 2>&1", 15000);
     }
+#endif
     return waitForMySQL(30);
 }
 
 void AppController::stopMySQL()
 {
     QString bin = mysqlBin("mysqladmin");
-    if (!runCmdFull(QString("'%1' -u root ping 2>/dev/null").arg(bin))
+    if (!runCmdFull(QString("\"%1\" -u root ping ").arg(bin) + NUL())
              .contains("mysqld is alive"))
         return;
+#if defined(Q_OS_WIN)
+    runCmdElevated("net stop MySQL");
+#elif defined(Q_OS_LINUX)
+    runCmdElevated("systemctl stop mysql");
+#else
     if (isOracleInstall()) {
         QString plist = "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist";
         if (QFile::exists(plist))
@@ -325,6 +658,7 @@ void AppController::stopMySQL()
     } else {
         runCmdFull("brew services stop mysql@8.4 2>&1", 15000);
     }
+#endif
     QEventLoop loop;
     QTimer::singleShot(2000, &loop, &QEventLoop::quit);
     loop.exec();
@@ -337,7 +671,7 @@ bool AppController::waitForMySQL(int maxSeconds)
         QEventLoop loop;
         QTimer::singleShot(1000, &loop, &QEventLoop::quit);
         loop.exec();
-        if (runCmdFull(QString("'%1' -u root ping 2>/dev/null").arg(bin))
+        if (runCmdFull(QString("\"%1\" -u root ping ").arg(bin) + NUL())
                 .contains("mysqld is alive"))
             return true;
     }
@@ -346,20 +680,164 @@ bool AppController::waitForMySQL(int maxSeconds)
 
 void AppController::restartMySQL()
 {
+#if defined(Q_OS_WIN)
+    // Service Windows : arrêt puis démarrage (l'app est déjà élevée).
+    runCmdElevated("net stop MySQL & net start MySQL");
+#elif defined(Q_OS_LINUX)
+    runCmdElevated("systemctl restart mysql");
+#else
     if (isOracleInstall()) {
-        QString plist = "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist";
+        // Démon système (/Library/LaunchDaemons) : le redémarrage exige root, on
+        // passe donc par une exécution privilégiée.
+        const QString plist = "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist";
         if (QFile::exists(plist))
-            runLongOp(
-                QString("launchctl unload '%1' && launchctl load -w '%1' 2>&1").arg(plist),
-                tr("Redémarrage de MySQL…"), 30000);
+            runCmdElevated(
+                QString("launchctl unload '%1'; launchctl load -w '%1'").arg(plist));
         else
-            runLongOp("/usr/local/mysql/support-files/mysql.server restart 2>&1",
-                      tr("Redémarrage de MySQL…"), 30000);
+            runCmdElevated("/usr/local/mysql/support-files/mysql.server restart");
     } else {
         runLongOp("brew services restart mysql@8.4 2>&1",
                   tr("Redémarrage de MySQL…"), 30000);
     }
+#endif
     waitForMySQL(15);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Dossier partagé /Users/Shared : secure_file_priv + test lecture/écriture
+// ─────────────────────────────────────────────────────────────────────────────
+//  Garantit que secure_file_priv pointe sur /Users/Shared dans my.cnf. La lecture
+//  est gratuite (aucune élévation) ; seule la correction (rare) édite my.cnf en
+//  root et redémarre mysqld.
+bool AppController::ensureSecureFilePriv()
+{
+    const QString target = sharedFolderPath();
+    if (getCnfVar("secure_file_priv") == target)
+        return true;
+    if (!setMyCnfVar("secure_file_priv", target))
+        return false;
+    restartMySQL();
+    return getCnfVar("secure_file_priv") == target;
+}
+
+//  Vérifie que mysql sait ÉCRIRE puis RELIRE un fichier dans /Users/Shared.
+//
+//  Les deux opérations sont exécutées CÔTÉ SERVEUR : mysqld écrit le fichier via
+//  « SELECT … INTO OUTFILE », puis le relit via « LOAD_FILE ». On NE relit JAMAIS
+//  le fichier depuis l'app : INTO OUTFILE le crée avec des droits restrictifs
+//  appartenant au compte _mysql (p. ex. 0640 _mysql:_mysql), illisibles par
+//  l'utilisateur courant — c'était la cause de l'échec systématique précédent.
+//
+//  On travaille dans un sous-dossier possédé par l'app (donc sans sticky bit) et
+//  rendu inscriptible à tous, ce qui permet ensuite de supprimer proprement le
+//  fichier créé par _mysql.
+bool AppController::testSharedFolderRW()
+{
+    const QString sub   = sharedFolderPath() + "/.mysql_rwtest";
+    const QString token = "MYSQLD_RW_OK";
+    const QString file  = sub + "/probe.txt";   // écrit ET relu par le serveur
+
+    QDir().mkpath(sub);
+#if !defined(Q_OS_WIN)
+    // macOS : rendre le sous-dossier inscriptible par le compte _mysql (0777) ;
+    // chmod shell en renfort de QFile::setPermissions. (Sous Windows, C:\Users\Public
+    // est déjà accessible en écriture à tous les comptes — rien à faire.)
+    runCmd("chmod 777 '" + sub + "'");
+#endif
+
+    // ── Écriture par le serveur ───────────────────────────────────────────────
+    QFile::remove(file);   // INTO OUTFILE refuse un fichier existant
+    runCmdFull(QString(
+        "\"%1\" -u \"%2\" -p\"%3\" -N -B -e \"SELECT '%4' INTO OUTFILE '%5';\" 2>&1")
+        .arg(mysqlBin("mysql"), m_login, m_password, token, file));
+
+    // ── Relecture par le serveur (et non par l'app) ───────────────────────────
+    const QString out = runCmdFull(QString(
+        "\"%1\" -u \"%2\" -p\"%3\" -N -B -e \"SELECT LOAD_FILE('%4');\" 2>&1")
+        .arg(mysqlBin("mysql"), m_login, m_password, file));
+
+    // ── Nettoyage ─────────────────────────────────────────────────────────────
+    QFile::remove(file);
+    QDir().rmdir(sub);
+
+    // Écriture ET lecture réussies si le jeton est revenu intact.
+    return out.contains(token);
+}
+
+//  Affiché lorsque mysqld ne parvient pas à écrire dans /Users/Shared : guide
+//  l'utilisateur pour accorder l'« Accès complet au disque » au binaire mysqld,
+//  puis attend qu'il demande un ré-essai. Renvoie false si l'utilisateur annule.
+bool AppController::guideMysqldFullDiskAccess()
+{
+    const QString mysqld = mysqlBin("mysqld");
+
+    forever {
+        QMessageBox box(m_dialog);
+        box.setIcon(QMessageBox::Warning);
+        box.setWindowTitle(tr("Accès complet au disque requis pour mysqld"));
+        box.setText(tr(
+            "mysqld ne parvient pas à écrire dans /Users/Shared. Sur macOS, un "
+            "démon doit disposer de l'« Accès complet au disque » pour y accéder.\n\n"
+            "Pour l'autoriser :\n"
+            "  1. Cliquez sur « Ouvrir les Réglages Système ».\n"
+            "  2. Dans la liste, cliquez sur le bouton « + ».\n"
+            "  3. mysqld est révélé dans le Finder : glissez-le dans la fenêtre "
+            "(ou appuyez sur ⌘⇧G et collez son chemin) :\n\n"
+            "        %1\n\n"
+            "  4. Activez l'interrupteur en face de mysqld.\n"
+            "  5. Revenez ici et cliquez sur « Réessayer ».").arg(mysqld));
+
+        QPushButton* openBtn  =
+            box.addButton(tr("Ouvrir les Réglages Système"), QMessageBox::ActionRole);
+        QPushButton* retryBtn =
+            box.addButton(tr("Réessayer"), QMessageBox::AcceptRole);
+        QPushButton* cancelBtn =
+            box.addButton(tr("Annuler"), QMessageBox::RejectRole);
+        Q_UNUSED(retryBtn);
+        box.exec();
+
+        if (box.clickedButton() == cancelBtn)
+            return false;
+
+        if (box.clickedButton() == openBtn) {
+            runCmd("open 'x-apple.systempreferences:com.apple.preference.security"
+                   "?Privacy_AllFiles' 2>/dev/null");
+            runCmd("open -R '" + mysqld + "' 2>/dev/null");
+            continue;            // réaffiche la boîte ; l'utilisateur agit puis réessaie
+        }
+        return true;             // « Réessayer »
+    }
+}
+
+//  Lit la valeur d'une clé dans la section [mysqld] de my.cnf (sans connexion).
+QString AppController::getCnfVar(const QString& key)
+{
+    QFile f(getCnfPath());
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    QTextStream ts(&f);
+    bool inMysqld = false;
+    QString value;
+    while (!ts.atEnd()) {
+        const QString line = ts.readLine().trimmed();
+        if (line == "[mysqld]")   { inMysqld = true;  continue; }
+        if (line.startsWith('[')) { inMysqld = false; continue; }
+        if (inMysqld) {
+            const int eq = line.indexOf('=');
+            // MySQL accepte « secure_file_priv » et « secure-file-priv ».
+            if (eq > 0) {
+                const QString k = line.left(eq).trimmed().replace('-', '_');
+                if (k == QString(key).replace('-', '_'))
+                    value = line.mid(eq + 1).trimmed();
+            }
+        }
+    }
+    f.close();
+    // Retirer d'éventuels guillemets (fréquents sous Windows) et un slash final.
+    if (value.size() >= 2 && value.startsWith('"') && value.endsWith('"'))
+        value = value.mid(1, value.size() - 2);
+    if (value.endsWith('/')) value.chop(1);
+    return value;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -368,7 +846,7 @@ void AppController::restartMySQL()
 bool AppController::isServerRunning()
 {
     QString bin = mysqlBin("mysqladmin");
-    QString out = runCmdFull(QString("'%1' ping 2>&1").arg(bin));
+    QString out = runCmdFull(QString("\"%1\" ping 2>&1").arg(bin));
     return out.contains("mysqld is alive", Qt::CaseInsensitive)
         || out.contains("Access denied",   Qt::CaseInsensitive);
 }
@@ -376,7 +854,7 @@ bool AppController::isServerRunning()
 bool AppController::tryConnect()
 {
     QString out = runCmdFull(
-        QString("'%1' -u '%2' -p'%3' ping 2>&1")
+        QString("\"%1\" -u \"%2\" -p\"%3\" ping 2>&1")
             .arg(mysqlBin("mysqladmin"), m_login, m_password));
     return out.contains("mysqld is alive");
 }
@@ -394,7 +872,7 @@ bool AppController::checkPrivileges(QStringList& outMissing)
     };
 
     QString raw = runCmdFull(
-        QString("'%1' -u '%2' -p'%3' -N -B -e "
+        QString("\"%1\" -u \"%2\" -p\"%3\" -N -B -e "
                 "\"SHOW GRANTS FOR '%2'@'localhost';\" 2>&1")
             .arg(mysqlBin("mysql"), m_login, m_password));
 
@@ -434,85 +912,73 @@ bool AppController::createUser()
         "GRANT ALL PRIVILEGES ON *.* TO '%1'@'localhost' WITH GRANT OPTION;"
         "FLUSH PRIVILEGES;").arg(m_login, m_password);
     QString out = runCmdFull(
-        QString("'%1' -u root -e \"%2\" 2>&1").arg(mysqlBin("mysql"), sql));
+        QString("\"%1\" -u root -e \"%2\" 2>&1").arg(mysqlBin("mysql"), sql));
     return !out.contains("ERROR", Qt::CaseInsensitive);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  /Users/Shared
+//  Dossier partagé : existe et est partagé
 // ─────────────────────────────────────────────────────────────────────────────
 bool AppController::setupSharedFolder()
 {
-    const QString path = "/Users/Shared";
-    if (!QDir(path).exists()) QDir().mkpath(path);
+    const QString path = sharedFolderPath();
+    if (!QDir(path).exists())
+        QDir().mkpath(path);
 
-    QString list = runCmd("sharing -l 2>/dev/null");
-    if (list.contains(path)) return true;
+#if defined(Q_OS_WIN)
+    // C:\Users\Public existe par défaut et est accessible en lecture/écriture à
+    // tous les comptes Windows : aucun partage supplémentaire à configurer.
+    return QDir(path).exists();
+#elif defined(Q_OS_LINUX)
+    // Tout le paramétrage privilégié en une seule élévation (pkexec) :
+    //   • créer /Users/Shared, propriétaire = utilisateur courant ;
+    //   • AppArmor : autoriser mysqld à accéder au dossier ;
+    //   • ouvrir le port 3306 (ufw) ;
+    //   • installer Samba si besoin et partager le dossier sur le réseau.
+    const QString user = runCmd("id -un 2>/dev/null").trimmed();
+    const QString script = QString(
+        "mkdir -p '%1'; chown %2 '%1'; chmod 0775 '%1'; "
+        // — AppArmor : ne pas bloquer mysqld sur le dossier partagé —
+        "mkdir -p /etc/apparmor.d/local; "
+        "touch /etc/apparmor.d/local/usr.sbin.mysqld; "
+        "grep -q '%1/' /etc/apparmor.d/local/usr.sbin.mysqld || "
+          "printf '%1/ r,\\n%1/** rwk,\\n' >> /etc/apparmor.d/local/usr.sbin.mysqld; "
+        "[ -f /etc/apparmor.d/usr.sbin.mysqld ] && "
+          "apparmor_parser -r /etc/apparmor.d/usr.sbin.mysqld; "
+        "systemctl reload apparmor 2>/dev/null || true; "
+        // — pare-feu : ouvrir le port MySQL —
+        "ufw allow 3306 || true; "
+        // — Samba : installer si absent puis partager —
+        "dpkg -s samba >/dev/null 2>&1 || "
+          "{ apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y samba; }; "
+        "grep -q '^\\[Shared\\]' /etc/samba/smb.conf 2>/dev/null || "
+          "printf '\\n[Shared]\\n   path = %1\\n   browseable = yes\\n"
+          "   read only = no\\n   guest ok = yes\\n' >> /etc/samba/smb.conf; "
+        "systemctl restart smbd 2>/dev/null || service smbd restart 2>/dev/null || true"
+        ).arg(path, user);
+    runCmdElevated(script);
+    return QDir(path).exists();
+#else
+    // Déjà partagé ? (lecture seule, aucune élévation)
+    if (runCmd("sharing -l 2>/dev/null").contains(path))
+        return true;
 
-    runCmd("launchctl enable system/com.apple.smbd 2>/dev/null");
-    runCmd("launchctl kickstart -k system/com.apple.smbd 2>/dev/null");
+    // Activer SMB et déclarer le partage — opérations privilégiées (une invite
+    // macOS). On valide ensuite via une relecture de « sharing -l », pas via la
+    // sortie d'osascript.
+    runCmdElevated(
+        "launchctl enable system/com.apple.smbd; "
+        "launchctl kickstart -k system/com.apple.smbd; "
+        "sharing -a '/Users/Shared' -n 'Partagé' -s 001 -g 000; "
+        "launchctl kickstart -k system/com.apple.smbd");
 
-    QString out = runCmdFull(
-        "sharing -a '/Users/Shared' -n 'Shared' -s 001 -g 000 2>&1");
-    if (out.contains("error", Qt::CaseInsensitive)) return false;
-
-    runCmd("launchctl kickstart -k system/com.apple.smbd 2>/dev/null");
-    return true;
+    return runCmd("sharing -l 2>/dev/null").contains(path);
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Variables MySQL
 // ─────────────────────────────────────────────────────────────────────────────
-bool AppController::checkAndFixVariables()
-{
-    const QString expectedMode = "STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION";
-    bool needsRestart = false;
-
-    if (!isVariableCorrect("secure_file_priv", "/Users/Shared")) {
-        if (!setMyCnfVar("secure_file_priv", "/Users/Shared")) return false;
-        needsRestart = true;
-    }
-    if (!isVariableCorrect("sql_mode", expectedMode)) {
-        if (!setMyCnfVar("sql_mode", expectedMode)) return false;
-        runCmdFull(QString("'%1' -u '%2' -p'%3' -e "
-                           "\"SET GLOBAL sql_mode='%4';\" 2>&1")
-                   .arg(mysqlBin("mysql"), m_login, m_password, expectedMode));
-        needsRestart = true;
-    }
-
-    if (needsRestart) restartMySQL();
-
-    return isVariableCorrect("secure_file_priv", "/Users/Shared")
-        && isVariableCorrect("sql_mode", expectedMode);
-}
-
-bool AppController::isVariableCorrect(const QString& var, const QString& expected)
-{
-    QString current = getVariable(var);
-    if (var == "secure_file_priv") {
-        QString n = current.endsWith('/') ? current.chopped(1) : current;
-        return n == expected;
-    }
-    if (var == "sql_mode") {
-        QStringList required = expected.split(',');
-        QStringList actual   = current.split(',');
-        for (auto& r : required)
-            if (!actual.contains(r)) return false;
-        return true;
-    }
-    return current == expected;
-}
-
-QString AppController::getVariable(const QString& var)
-{
-    QString out = runCmd(
-        QString("'%1' -u '%2' -p'%3' -N -B -e "
-                "\"SHOW VARIABLES WHERE Variable_name='%4';\" 2>/dev/null")
-            .arg(mysqlBin("mysql"), m_login, m_password, var));
-    QStringList parts = out.split('\t');
-    return parts.size() >= 2 ? parts[1].trimmed() : QString();
-}
-
 bool AppController::setMyCnfVar(const QString& key, const QString& value)
 {
     QString path = getCnfPath();
@@ -548,17 +1014,44 @@ bool AppController::setMyCnfVar(const QString& key, const QString& value)
         if (!inserted) { lines.prepend(key + " = " + value); lines.prepend("[mysqld]"); }
     }
 
-    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream ts(&f);
-        for (auto& l : lines) ts << l << '\n';
-        f.close();
-        return true;
+    // Le fichier de conf appartient au système : on écrit le contenu dans un
+    // fichier temporaire, puis on le copie en place avec les droits administrateur.
+    const QString tmp = QDir::tempPath() + "/mysql_conf.new";
+    QFile out(tmp);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+    {
+        QTextStream ts(&out);
+        for (const QString& l : lines) ts << l << '\n';
     }
-    return false;
+    out.close();
+
+#if defined(Q_OS_WIN)
+    const QString src = QString(tmp).replace('/', '\\');
+    const QString dst = QString(path).replace('/', '\\');
+    const bool ok = runCmdElevated(QString("copy /Y \"%1\" \"%2\"").arg(src, dst));
+#else
+    const bool ok = runCmdElevated(
+        QString("cp '%1' '%2' && chmod 644 '%2'").arg(tmp, path));
+#endif
+    QFile::remove(tmp);
+    return ok;
 }
 
 QString AppController::getCnfPath()
 {
+#if defined(Q_OS_WIN)
+    for (const QString& p : {QString("C:/ProgramData/MySQL/MySQL Server 8.4/my.ini"),
+                             QString("C:/ProgramData/MySQL/MySQL Server 8.0/my.ini")})
+        if (QFile::exists(p)) return p;
+    return "C:/ProgramData/MySQL/MySQL Server 8.4/my.ini";
+#elif defined(Q_OS_LINUX)
+    // Ubuntu (apt) : la section [mysqld] vit dans mysql.conf.d/mysqld.cnf.
+    for (const QString& p : {QString("/etc/mysql/mysql.conf.d/mysqld.cnf"),
+                             QString("/etc/mysql/my.cnf")})
+        if (QFile::exists(p)) return p;
+    return "/etc/mysql/mysql.conf.d/mysqld.cnf";
+#else
     QString prefix = getBrewPrefix();
     if (!prefix.isEmpty()) return prefix + "/etc/my.cnf";
     for (auto& p : {QString("/etc/my.cnf"),
@@ -568,6 +1061,7 @@ QString AppController::getCnfPath()
         if (QFile::exists(p)) return p;
     if (isOracleInstall()) return "/etc/my.cnf";
     return "/opt/homebrew/etc/my.cnf";
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -576,7 +1070,7 @@ QString AppController::getCnfPath()
 QString AppController::runCmd(const QString& cmd, int timeoutMs)
 {
     QProcess p;
-    p.start("/bin/bash", {"-c", cmd});
+    p.start(shellProgram(), shellArgs(cmd));
     p.waitForFinished(timeoutMs);
     return p.readAllStandardOutput().trimmed();
 }
@@ -585,9 +1079,59 @@ QString AppController::runCmdFull(const QString& cmd, int timeoutMs)
 {
     QProcess p;
     p.setProcessChannelMode(QProcess::MergedChannels);
-    p.start("/bin/bash", {"-c", cmd});
+    p.start(shellProgram(), shellArgs(cmd));
     p.waitForFinished(timeoutMs);
     return p.readAllStandardOutput().trimmed();
+}
+
+bool AppController::runCmdElevated(const QString& cmd)
+{
+#if defined(Q_OS_WIN)
+    // L'application Windows tourne déjà en tant qu'administrateur (garde au
+    // démarrage) : aucune élévation supplémentaire n'est nécessaire.
+    const QString out = runCmdFull(cmd);
+    return !out.contains("Access is denied", Qt::CaseInsensitive)
+        && !out.contains("denied",           Qt::CaseInsensitive);
+#elif defined(Q_OS_LINUX)
+    // Élévation via pkexec (invite graphique PolicyKit). La commande est déposée
+    // dans un script temporaire pour éviter les soucis de guillemets.
+    const QString scriptPath = QDir::tempPath() + "/mysqlinstaller_priv.sh";
+    QFile s(scriptPath);
+    if (!s.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+    { QTextStream ts(&s); ts << "#!/bin/sh\n" << cmd << '\n'; }
+    s.close();
+    runCmd("chmod +x '" + scriptPath + "'");
+
+    const QString out = runCmdFull("pkexec sh '" + scriptPath + "' 2>&1", 900000);
+    QFile::remove(scriptPath);
+    return !out.contains("Authentication failed", Qt::CaseInsensitive)
+        && !out.contains("not authorized",        Qt::CaseInsensitive)
+        && !out.contains("dismissed",             Qt::CaseInsensitive);
+#else
+    // Exécute « cmd » avec les droits administrateur via une seule invite macOS.
+    // La commande est déposée dans un script temporaire (évite tout enfer de
+    // guillemets imbriqués osascript ▸ AppleScript ▸ shell).
+    const QString scriptPath = QDir::tempPath() + "/mysqlinstaller_priv.sh";
+    QFile s(scriptPath);
+    if (!s.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+    {
+        QTextStream ts(&s);
+        ts << "#!/bin/sh\n" << cmd << '\n';
+    }
+    s.close();
+    runCmd("chmod +x '" + scriptPath + "'");
+
+    const QString out = runCmdFull(QString(
+        "osascript -e 'do shell script \"%1\" with administrator privileges' 2>&1")
+        .arg(scriptPath));
+    QFile::remove(scriptPath);
+
+    // Succès = l'utilisateur n'a pas annulé l'invite et osascript n'a pas échoué.
+    return !out.contains("User canceled", Qt::CaseInsensitive)
+        && !out.contains("execution error", Qt::CaseInsensitive);
+#endif
 }
 
 void AppController::runLongOp(const QString& cmd, const QString& label, int timeoutMs)
@@ -602,7 +1146,7 @@ void AppController::runLongOp(const QString& cmd, const QString& label, int time
     timeout.setSingleShot(true);
     QObject::connect(&proc,    &QProcess::finished, &loop, &QEventLoop::quit);
     QObject::connect(&timeout, &QTimer::timeout,    [&]{ proc.kill(); loop.quit(); });
-    proc.start("/bin/bash", {"-c", cmd});
+    proc.start(shellProgram(), shellArgs(cmd));
     if (timeoutMs > 0) timeout.start(timeoutMs);
     loop.exec();
 
@@ -612,6 +1156,9 @@ void AppController::runLongOp(const QString& cmd, const QString& label, int time
 
 QString AppController::getBrewPrefix()
 {
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+    return {};   // pas de Homebrew sous Windows/Linux
+#else
     if (m_brewPrefix.isNull()) {
         QProcess p;
         p.start("/bin/bash", {"-c", "brew --prefix mysql@8.4 2>/dev/null"});
@@ -624,10 +1171,19 @@ QString AppController::getBrewPrefix()
         }
     }
     return m_brewPrefix;
+#endif
 }
 
 QString AppController::mysqlBin(const QString& binary)
 {
+#if defined(Q_OS_WIN)
+    const QString oracle = oraclePrefix();
+    if (!oracle.isEmpty()) {
+        const QString full = oracle + "/bin/" + binary + ".exe";
+        if (QFile::exists(full)) return full;
+    }
+    return binary;   // supposé présent dans le PATH
+#else
     QString oracle = oraclePrefix();
     if (!oracle.isEmpty()) {
         QString full = oracle + "/bin/" + binary;
@@ -639,4 +1195,5 @@ QString AppController::mysqlBin(const QString& binary)
         if (QFile::exists(full)) return full;
     }
     return binary;
+#endif
 }

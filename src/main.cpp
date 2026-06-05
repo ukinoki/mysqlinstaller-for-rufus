@@ -15,7 +15,8 @@ int main(int argc, char* argv[])
     // Icône MySQL appliquée à toutes les fenêtres et boîtes de dialogue
     app.setWindowIcon(QIcon(":/mysql.png"));
 
-    // ── Vérification macOS ≥ Monterey ─────────────────────────────────────
+    // ── Vérification du système d'exploitation ────────────────────────────
+#if defined(Q_OS_MACOS)
     if (QOperatingSystemVersion::current()
             < QOperatingSystemVersion::MacOSMonterey) {
         QMessageBox::critical(nullptr,
@@ -26,6 +27,18 @@ int main(int argc, char* argv[])
             .arg(QOperatingSystemVersion::current().name()));
         return 1;
     }
+#elif defined(Q_OS_WIN)
+    if (QOperatingSystemVersion::current()
+            < QOperatingSystemVersion::Windows10) {
+        QMessageBox::critical(nullptr,
+            QCoreApplication::translate("main", "Système non compatible"),
+            QCoreApplication::translate("main",
+                "Ce programme nécessite Windows 10 ou Windows 11.\n"
+                "Version détectée : %1.")
+            .arg(QOperatingSystemVersion::current().name()));
+        return 1;
+    }
+#endif
 
     // ── Lancement ─────────────────────────────────────────────────────────
     auto* controller = new AppController();

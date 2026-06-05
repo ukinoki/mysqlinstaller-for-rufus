@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
         <file>mysql.png</file>
+        <file>chevron-down.svg</file>
     </qresource>
 </RCC>

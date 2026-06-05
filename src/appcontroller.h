@@ -20,8 +20,22 @@ private:
     CredentialsDialog*  m_dialog  = nullptr;
     bool                m_freshInstall = false;  // true = MySQL vient d'être installé
 
+    // ── Multi-plateforme ───────────────────────────────────────────────────
+    QString sharedFolderPath();          // /Users/Shared (macOS) | C:/Users/Public (Windows)
+
+    // ── Pré-requis ─────────────────────────────────────────────────────────
+    bool    isAdminUser();               // compte administrateur / processus élevé ?
+#if defined(Q_OS_WIN)
+    bool    isVCRedist2022Installed();   // Windows : Visual C++ Redistributable 2022
+    bool    installVCRedist2022();
+#endif
+#if defined(Q_OS_LINUX)
+    bool    isUbuntuVersionSupported();  // Ubuntu > 22.04 ?
+#endif
+
     // ── MySQL ──────────────────────────────────────────────────────────────
     bool    isMySQLInstalled();
+    bool    ensureMysqlInPath();         // chemin de mysql présent dans PATH (sinon l'ajoute)
     QString getMySQLVersion();
     bool    installMySQL();
     bool    upgradeMySQL();
@@ -32,17 +46,17 @@ private:
     bool    waitForMySQL(int maxSeconds = 30);
 
     // ── Identifiants ───────────────────────────────────────────────────────
-    bool    checkFullDiskAccess();   // vérifie + corrige l'accès TCC pour mysqld
     bool    isServerRunning();
     bool    tryConnect();
     bool    checkPrivileges(QStringList& outMissing);
     bool    createUser();
 
-    // ── Configuration ──────────────────────────────────────────────────────
-    bool    setupSharedFolder();
-    bool    checkAndFixVariables();      // vérifie + corrige secure_file_priv et sql_mode
-    bool    isVariableCorrect(const QString& var, const QString& expected);
-    QString getVariable(const QString& var);
+    // ── Dossier partagé /Users/Shared ──────────────────────────────────────
+    bool    setupSharedFolder();         // existe + partagé (crée/partage sinon)
+    bool    ensureSecureFilePriv();      // secure_file_priv = /Users/Shared (my.cnf)
+    bool    testSharedFolderRW();        // mysql lit ET écrit un fichier test
+    bool    guideMysqldFullDiskAccess(); // guide l'octroi du FDA à mysqld (ré-essai)
+    QString getCnfVar(const QString& key);
     bool    setMyCnfVar(const QString& key, const QString& value);
     QString getCnfPath();
     void    restartMySQL();
@@ -50,6 +64,7 @@ private:
     // ── Helpers ────────────────────────────────────────────────────────────
     QString runCmd(const QString& cmd, int timeoutMs = 30000);
     QString runCmdFull(const QString& cmd, int timeoutMs = 30000);
+    bool    runCmdElevated(const QString& cmd);   // exécution avec droits admin
     void    runLongOp(const QString& cmd, const QString& label,
                       int timeoutMs = 360000);
     QString getBrewPrefix();

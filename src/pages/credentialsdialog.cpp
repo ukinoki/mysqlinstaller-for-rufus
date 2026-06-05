@@ -37,7 +37,14 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
             border: 1px solid #D3D1C7; border-radius: 6px;
             padding: 4px 8px; font-size: 13px; background: #FFFFFF;
         }
-        QComboBox::drop-down { border: none; width: 20px; }
+        QComboBox::drop-down {
+            subcontrol-origin: padding; subcontrol-position: center right;
+            border: none; width: 24px;
+        }
+        QComboBox::down-arrow {
+            image: url(:/chevron-down.svg); width: 12px; height: 12px;
+        }
+        QComboBox::down-arrow:on { top: 1px; }
         QComboBox QAbstractItemView {
             border: 1px solid #D3D1C7; border-radius: 6px;
             selection-background-color: #EEEDFE; selection-color: #3C3489;
@@ -229,11 +236,11 @@ void CredentialsDialog::retranslateUi()
 
     const QString stepLabels[6] = {
         tr("MySQL 8.4.3 installé"),
-        tr("Accès à tous les fichiers"),
-        tr("Utilisateur valide"),
-        tr("Droits utilisateurs confirmés"),
-        tr("Dossier échange paramétré"),
-        tr("Variables MySQL valides")
+        tr("Variable d'environnement MySQL OK"),
+        tr("Dossier partagé existe et partagé"),
+        tr("secure_file_priv configuré"),
+        tr("Lecture / écriture mysql vérifiée"),
+        tr("Droits utilisateurs confirmés")
     };
     for (int i = 0; i < 6; i++)
         m_steps[i]->setText(stepLabels[i]);
