@@ -139,7 +139,10 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
     root->addWidget(m_stepsGroup);
 
     // ── Boutons ────────────────────────────────────────────────────────────
-    auto* buttons = new QDialogButtonBox();
+    //  Disposition manuelle (et non QDialogButtonBox) pour garantir un ordre
+    //  IDENTIQUE sur toutes les plateformes : le bouton principal (Vérifier /
+    //  Créer) est toujours en bas à droite, « Annuler » à sa gauche.
+    //  QDialogButtonBox aurait inversé l'ordre sous Windows.
     m_okBtn = new QPushButton();
     m_okBtn->setStyleSheet(R"(
         QPushButton {
@@ -150,10 +153,14 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
         QPushButton:hover     { background: #3C3489; }
         QPushButton:disabled  { background: #B4B2A9; }
     )");
+    m_okBtn->setDefault(true);     // déclenché par la touche Entrée
     m_cancelBtn = new QPushButton();
-    buttons->addButton(m_okBtn,     QDialogButtonBox::AcceptRole);
-    buttons->addButton(m_cancelBtn, QDialogButtonBox::RejectRole);
-    root->addWidget(buttons);
+
+    auto* buttonRow = new QHBoxLayout();
+    buttonRow->addStretch();
+    buttonRow->addWidget(m_cancelBtn);
+    buttonRow->addWidget(m_okBtn);
+    root->addLayout(buttonRow);
 
     connect(m_okBtn,     &QPushButton::clicked, this, &CredentialsDialog::onConfirmClicked);
     connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
