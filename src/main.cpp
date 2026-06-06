@@ -3,6 +3,8 @@
 #include <QTimer>
 #include <QIcon>
 #include <QOperatingSystemVersion>
+#include <QLockFile>
+#include <QDir>
 #include "appcontroller.h"
 
 int main(int argc, char* argv[])
@@ -14,6 +16,20 @@ int main(int argc, char* argv[])
 
     // Icône MySQL appliquée à toutes les fenêtres et boîtes de dialogue
     app.setWindowIcon(QIcon(":/mysql.png"));
+
+    // ── Instance unique ───────────────────────────────────────────────────
+    //  Empêche le lancement de deux exemplaires en parallèle. QLockFile gère le
+    //  cas d'un crash (verrou récupéré si le processus propriétaire est mort).
+    //  Le verrou reste détenu pendant toute la durée de app.exec().
+    static QLockFile lockFile(QDir::tempPath() + "/MySQLInstallerForRufus.lock");
+    if (!lockFile.tryLock(100)) {
+        QMessageBox::warning(nullptr,
+            QCoreApplication::translate("main", "Application déjà lancée"),
+            QCoreApplication::translate("main",
+                "MySQL Installer est déjà en cours d'exécution.\n"
+                "Une seule instance peut s'exécuter à la fois."));
+        return 0;
+    }
 
     // ── Vérification du système d'exploitation ────────────────────────────
 #if defined(Q_OS_MACOS)
