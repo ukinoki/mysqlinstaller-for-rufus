@@ -1,0 +1,104 @@
+name: Build Windows Installer
+
+# Déclenché :
+#   • automatiquement quand tu pousses un tag  v1.0 / v1.1 / etc.
+#   • manuellement depuis l'onglet "Actions" de GitHub (bouton "Run workflow")
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # nécessaire pour créer une Release GitHub
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. Récupérer le code source ────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Installer Qt 6 (MSVC 64-bit) ───────────────────────────────────
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.*'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          modules: 'qtsvg qtnetwork'
+          cache: true
+
+      # ── 3. Activer l'environnement MSVC (nmake, cl.exe) ───────────────────
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # ── 4. Installer Inno Setup 6 ─────────────────────────────────────────
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      # ── 5. Compiler (qmake + nmake) ────────────────────────────────────────
+      - name: Build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build-windows | Out-Null
+          Set-Location build-windows
+          qmake ..\MySQLInstaller.pro CONFIG+=release
+          if ($LASTEXITCODE -ne 0) { throw "qmake a échoué." }
+          nmake
+          if ($LASTEXITCODE -ne 0) { throw "nmake a échoué." }
+
+      # ── 6. Déployer les DLL Qt (windeployqt) ──────────────────────────────
+      - name: Deploy Qt runtime
+        id: deploy
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build-windows -Recurse -Filter "MySQLInstaller.exe" |
+                 Select-Object -First 1
+          if (-not $exe) { throw "MySQLInstaller.exe introuvable après le build." }
+          windeployqt --release --no-translations --compiler-runtime $exe.FullName
+          Write-Output "exe_dir=$($exe.DirectoryName)" >> $env:GITHUB_OUTPUT
+          Write-Host "Exe déployé dans : $($exe.DirectoryName)"
+
+      # ── 7. Créer l'installeur (Inno Setup) ────────────────────────────────
+      - name: Create installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          iscc MySQLInstallerForRufusSetup.iss "/DSourceDir=${{ steps.deploy.outputs.exe_dir }}"
+          if (-not (Test-Path "dist\MySQLInstallerForRufusSetup.exe")) {
+            throw "L'installeur n'a pas été généré."
+          }
+          Write-Host "Installeur prêt : dist\MySQLInstallerForRufusSetup.exe"
+
+      # ── 8. Conserver l'installeur comme artefact de build ─────────────────
+      #     (téléchargeable depuis l'onglet Actions même sans tag)
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MySQLInstallerForRufusSetup
+          path: dist\MySQLInstallerForRufusSetup.exe
+          if-no-files-found: error
+
+      # ── 9. Publier une Release GitHub (uniquement sur tag) ─────────────────
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "MySQL Installer for Rufus ${{ github.ref_name }}"
+          files: dist\MySQLInstallerForRufusSetup.exe
+          body: |
+            ## MySQL Installer for Rufus ${{ github.ref_name }}
+
+            **Installation** : téléchargez `MySQLInstallerForRufusSetup.exe`
+            ci-dessous et exécutez-le. Windows demande les droits administrateur
+            automatiquement.
+
+            > ⚠️ Si Windows SmartScreen affiche un avertissement, cliquez
+            > « Informations complémentaires » → « Exécuter quand même ».
+            > (L'exécutable n'est pas encore signé Authenticode.)
