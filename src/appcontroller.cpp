@@ -850,7 +850,8 @@ bool AppController::installMySQL()
     // 4. Initialisation du datadir (crée root@localhost SANS mot de passe).
     runLongOp(QString("\"%1\" --defaults-file=\"%2\" --initialize-insecure --console")
               .arg(QDir::toNativeSeparators(mysqld), QDir::toNativeSeparators(cnfPath)),
-              tr("Initialisation de MySQL…"), 300000);
+              tr("Initialisation de la base de données,\n"
+                 "cela peut prendre quelques instants…"), 300000);
     if (!QFile::exists(dataDir + "/mysql")) {     // schéma système créé ?
         QMessageBox::critical(nullptr, tr("Initialisation échouée"),
             tr("L'initialisation du datadir MySQL a échoué.\n\n%1").arg(lastErrLog()));
