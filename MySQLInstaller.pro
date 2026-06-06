@@ -39,13 +39,16 @@ macx {
 }
 
 win32 {
-    # Icône Windows (fournir un resources/app.ico ; décommentez une fois présent).
-    # RC_ICONS = resources/app.ico
-
-    # L'application Windows doit s'exécuter en tant qu'administrateur : on demande
-    # l'élévation via le manifeste UAC (toolchain MSVC).
-    QMAKE_LFLAGS += /MANIFESTUAC:\"level=\'requireAdministrator\' uiAccess=\'false\'\"
-
-    # Application fenêtrée (pas de console) côté MSVC.
+    # Application fenêtrée (pas de console).
     CONFIG -= console
+
+    # L'application doit s'exécuter en tant qu'administrateur. Plutôt que le
+    # drapeau /MANIFESTUAC (spécifique à link.exe / MSVC et délicat à échapper),
+    # on embarque notre propre manifeste via une ressource .rc — portable MSVC
+    # ET MinGW. Voir resources/win_manifest.rc et resources/app.manifest.
+    RC_FILE = resources/win_manifest.rc
+
+    # MSVC génère son propre manifeste par défaut : on le désactive pour éviter
+    # un conflit (LNK4078) avec celui embarqué par le .rc.
+    win32-msvc: QMAKE_LFLAGS += /MANIFEST:NO
 }

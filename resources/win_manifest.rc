@@ -1,0 +1,10 @@
+// Ressource Windows : embarque le manifeste UAC (requireAdministrator) dans
+// l'exécutable. Portable MSVC (rc.exe) et MinGW (windres) — pas d'include requis.
+//   1  = CREATEPROCESS_MANIFEST_RESOURCE_ID (manifeste d'un .exe)
+//   24 = RT_MANIFEST
+//
+// Pour ajouter l'icône de l'exe : créez resources/app.ico puis décommentez la
+// ligne ci-dessous (et activez le bloc correspondant dans MySQLInstaller.pro).
+// IDI_ICON1 ICON "app.ico"
+
+1 24 "app.manifest"
