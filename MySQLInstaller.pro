@@ -53,4 +53,12 @@ win32 {
     # LNK1123) avec celui de notre .rc. La dépendance « Common-Controls » que Qt
     # ajoutait est désormais déclarée directement dans resources/app.manifest.
     win32-msvc: CONFIG -= embed_manifest_exe
+
+    # Déploiement automatique des DLL Qt (+ plugins) à côté de l'exe après chaque
+    # compilation. L'exe est ainsi toujours lançable directement (double-clic,
+    # élévation UAC) sans relancer windeployqt à la main — y compris après un
+    # « Clean ». $(DESTDIR_TARGET) = chemin complet de l'exe (sous-dossier
+    # release\ ou debug\). windeployqt détecte seul debug/release.
+    qtPrepareTool(QMAKE_WINDEPLOYQT, windeployqt)
+    QMAKE_POST_LINK += $$QMAKE_WINDEPLOYQT --no-translations $(DESTDIR_TARGET)
 }
