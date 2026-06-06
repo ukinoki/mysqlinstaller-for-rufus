@@ -19,9 +19,11 @@ jobs:
     steps:
       # ── 1. Récupérer le code source ────────────────────────────────────────
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # ── 2. Installer Qt 6 (MSVC 64-bit) ───────────────────────────────────
+      #  Network fait partie de qtbase (install de base) → pas un module à part.
+      #  Seul Svg est un module add-on à demander explicitement.
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -29,7 +31,7 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
-          modules: 'qtsvg qtnetwork'
+          modules: 'qtsvg'
           cache: true
 
       # ── 3. Activer l'environnement MSVC (nmake, cl.exe) ───────────────────
