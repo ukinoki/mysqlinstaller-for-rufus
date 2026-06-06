@@ -51,7 +51,6 @@ private:
     QLineEdit*   m_password;
     QLabel*      m_confirmLabel;
     QLineEdit*   m_confirm;
-    QFormLayout* m_form;
     QGroupBox*   m_stepsGroup;
     QLabel*      m_errorLabel;
     QPushButton* m_okBtn;

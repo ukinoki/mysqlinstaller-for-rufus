@@ -36,11 +36,6 @@ ProgressDialog::ProgressDialog(const QString& operation, QWidget* parent)
     root->addWidget(m_progress);
 }
 
-void ProgressDialog::setOperation(const QString& op)
-{
-    m_label->setText(op);
-}
-
 void ProgressDialog::setProgress(qint64 received, qint64 total)
 {
     if (total <= 0) {                 // taille inconnue → barre animée

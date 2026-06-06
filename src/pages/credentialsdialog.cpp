@@ -4,7 +4,6 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QRegularExpressionValidator>
-#include <QDialogButtonBox>
 #include <QApplication>
 #include <QEventLoop>
 #include <QTimer>
@@ -71,10 +70,10 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
     auto* fieldGroup = new QGroupBox();
     fieldGroup->setStyleSheet(
         "QGroupBox { border: 1px solid #D3D1C7; border-radius: 10px; padding-top: 0; }");
-    m_form = new QFormLayout(fieldGroup);
-    m_form->setContentsMargins(16, 16, 16, 16);
-    m_form->setSpacing(12);
-    m_form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    auto* form = new QFormLayout(fieldGroup);
+    form->setContentsMargins(16, 16, 16, 16);
+    form->setSpacing(12);
+    form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     auto* alphaNum = new QRegularExpressionValidator(
         QRegularExpression("[a-zA-Z0-9]*"), this);
@@ -97,9 +96,9 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
     m_passwordLabel = new QLabel();
     m_confirmLabel  = new QLabel();
 
-    m_form->addRow(m_loginLabel,    m_login);
-    m_form->addRow(m_passwordLabel, m_password);
-    m_form->addRow(m_confirmLabel,  m_confirm);
+    form->addRow(m_loginLabel,    m_login);
+    form->addRow(m_passwordLabel, m_password);
+    form->addRow(m_confirmLabel,  m_confirm);
 
     if (mode == Mode::Verify) {
         m_confirmLabel->hide();
