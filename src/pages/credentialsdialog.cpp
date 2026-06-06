@@ -10,6 +10,8 @@
 #include <QToolTip>
 #include <QCursor>
 #include <QEvent>
+#include <QKeyEvent>
+#include <QCloseEvent>
 
 // ── Traducteur partagé (géré par changeLanguage) ──────────────────────────────
 QTranslator* CredentialsDialog::s_translator = nullptr;
@@ -155,8 +157,14 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
         QPushButton:hover     { background: #3C3489; }
         QPushButton:disabled  { background: #B4B2A9; }
     )");
-    m_okBtn->setDefault(true);     // déclenché par la touche Entrée
+    m_okBtn->setDefault(true);     // mis en avant visuellement (bouton principal)
+    // autoDefault désactivé sur les deux boutons : sinon, quand le bouton OK est
+    // désactivé (champs invalides), la touche Entrée déclenchait le bouton voisin
+    // « Annuler » via la chaîne de focus — ce qui fermait le programme. La touche
+    // Entrée est désormais entièrement pilotée par keyPressEvent().
+    m_okBtn->setAutoDefault(false);
     m_cancelBtn = new QPushButton();
+    m_cancelBtn->setAutoDefault(false);
 
     // Conteneur autour du bouton OK : un widget désactivé ne reçoit pas les
     // événements de survol, donc impossible d'y afficher un tooltip. Le conteneur
@@ -385,8 +393,15 @@ void CredentialsDialog::setInputsEnabled(bool enabled)
     if (m_mode == Mode::Create) m_confirm->setEnabled(enabled);
     // À la réactivation, l'état du bouton dépend de la validité des champs ;
     // au verrouillage (traitement en cours), il est désactivé.
-    if (enabled) updateOkState();
-    else         m_okBtn->setEnabled(false);
+    if (enabled) {
+        updateOkState();
+        // La main est donnée à l'utilisateur : placer le focus sur le champ login,
+        // prêt à la saisie (le texte éventuel est sélectionné pour une ressaisie).
+        m_login->setFocus(Qt::OtherFocusReason);
+        m_login->selectAll();
+    } else {
+        m_okBtn->setEnabled(false);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -444,4 +459,38 @@ bool CredentialsDialog::eventFilter(QObject* obj, QEvent* event)
     if (obj == m_okWrap && event->type() == QEvent::Enter && !m_okBtn->isEnabled())
         QToolTip::showText(QCursor::pos(), inputCriteria());
     return QDialog::eventFilter(obj, event);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Touches : la fiche ne peut être fermée/validée QUE par les boutons.
+//   • Entrée / Entrée-pavé : valide le formulaire, mais seulement si les champs
+//     sont valides (bouton OK actif). Sinon la touche est consommée (l'ancien
+//     comportement déclenchait par mégarde « Annuler » → fermeture du programme).
+//   • Échap : neutralisée (sinon QDialog appellerait reject() → quit).
+// ─────────────────────────────────────────────────────────────────────────────
+void CredentialsDialog::keyPressEvent(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Escape:
+        event->ignore();        // ne pas propager à QDialog (pas de reject)
+        return;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        if (m_okBtn->isEnabled())
+            onConfirmClicked();
+        event->accept();        // consommée dans tous les cas
+        return;
+    default:
+        QDialog::keyPressEvent(event);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Fermeture par la croix de la fenêtre / Alt+F4 : bloquée. La fiche ne se ferme
+//  que via « Annuler » (reject) ou la fin du processus de vérification — qui
+//  passent par done()/hide() et ne déclenchent pas closeEvent().
+// ─────────────────────────────────────────────────────────────────────────────
+void CredentialsDialog::closeEvent(QCloseEvent* event)
+{
+    event->ignore();
 }

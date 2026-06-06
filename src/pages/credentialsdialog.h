@@ -34,6 +34,8 @@ signals:
 protected:
     void changeEvent(QEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* event) override;  // tooltip bouton désactivé
+    void keyPressEvent(QKeyEvent* event) override;           // Entrée/Échap maîtrisés
+    void closeEvent(QCloseEvent* event) override;            // bloque la croix / Alt+F4
 
 private slots:
     void onConfirmClicked();
