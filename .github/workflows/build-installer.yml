@@ -2,12 +2,19 @@ name: Build Windows Installer
 
 # Déclenché :
 #   • automatiquement quand tu pousses un tag  v1.0 / v1.1 / etc.
-#   • manuellement depuis l'onglet "Actions" de GitHub (bouton "Run workflow")
+#   • manuellement depuis l'onglet "Actions" de GitHub (bouton "Run workflow") :
+#     renseigne alors le champ "release_tag" (ex. v1.0) pour publier une Release
+#     — le workflow crée lui-même le tag. Laisse vide pour seulement bâtir l'exe.
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag de release à créer (ex. v1.0). Vide = pas de Release, juste le build."
+        required: false
+        default: ''
 
 permissions:
   contents: write   # nécessaire pour créer une Release GitHub
@@ -87,12 +94,17 @@ jobs:
           path: dist\MySQLInstallerForRufusSetup.exe
           if-no-files-found: error
 
-      # ── 9. Publier une Release GitHub (uniquement sur tag) ─────────────────
+      # ── 9. Publier une Release GitHub ──────────────────────────────────────
+      #  Déclenchée par un push de tag, OU par un run manuel avec release_tag
+      #  renseigné. Dans ce dernier cas, l'action crée elle-même le tag (sur le
+      #  commit courant), ce qui contourne l'impossibilité de pousser un tag
+      #  depuis certains environnements.
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          name: "MySQL Installer for Rufus ${{ github.ref_name }}"
+          tag_name: ${{ inputs.release_tag != '' && inputs.release_tag || github.ref_name }}
+          name: "MySQL Installer for Rufus ${{ inputs.release_tag != '' && inputs.release_tag || github.ref_name }}"
           files: dist\MySQLInstallerForRufusSetup.exe
           body: |
             ## MySQL Installer for Rufus ${{ github.ref_name }}
