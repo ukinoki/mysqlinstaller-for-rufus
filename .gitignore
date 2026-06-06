@@ -1,2 +1,23 @@
+# macOS
 .DS_Store
 src/.DS_Store
+
+# Dossiers de build (générés par qmake / Qt Creator / make)
+build/
+build-*/
+/build-windows/
+*.o
+*.obj
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.exe
+*.app/
+
+# Qt Creator — réglages locaux et cache de l'éditeur (clangd)
+.qtcreator/
+*.pro.user
+*.pro.user.*
+.qtc_clangd/
+.cache/
