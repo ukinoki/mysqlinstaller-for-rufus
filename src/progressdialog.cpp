@@ -40,3 +40,13 @@ void ProgressDialog::setOperation(const QString& op)
 {
     m_label->setText(op);
 }
+
+void ProgressDialog::setProgress(qint64 received, qint64 total)
+{
+    if (total <= 0) {                 // taille inconnue → barre animée
+        m_progress->setRange(0, 0);
+        return;
+    }
+    m_progress->setRange(0, 100);
+    m_progress->setValue(int(received * 100 / total));
+}

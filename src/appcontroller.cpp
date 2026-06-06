@@ -12,6 +12,10 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QRegularExpression>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrl>
 
 #if defined(Q_OS_WIN)
 #  define WIN32_LEAN_AND_MEAN
@@ -688,10 +692,8 @@ bool AppController::installMySQL()
              QDir::toNativeSeparators(progData),
              QDir::toNativeSeparators(extract)));
 
-    // 1. Téléchargement de l'archive ZIP (~250 Mo).
-    runLongOp(QString("curl -fSL -o \"%1\" \"%2\"")
-              .arg(QDir::toNativeSeparators(zipPath), url),
-              tr("Téléchargement de MySQL %1…").arg(version), 1800000);
+    // 1. Téléchargement de l'archive ZIP (~250 Mo) avec barre de progression.
+    downloadFile(url, zipPath, tr("Téléchargement de MySQL %1…").arg(version));
     if (!QFile::exists(zipPath) || QFileInfo(zipPath).size() < 1'000'000LL) {
         QFile::remove(zipPath);
         QMessageBox::critical(nullptr, tr("Téléchargement échoué"),
@@ -1326,6 +1328,46 @@ void AppController::runLongOp(const QString& cmd, const QString& label, int time
 
     dlg->close();
     delete dlg;
+}
+
+//  Téléchargement HTTP(S) avec barre de progression (vrai pourcentage), via
+//  QNetworkAccessManager (suit les redirections ; HTTPS géré nativement —
+//  Schannel sous Windows, Secure Transport sous macOS).
+bool AppController::downloadFile(const QString& url, const QString& dest,
+                                 const QString& label)
+{
+    QFile file(dest);
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+
+    ProgressDialog dlg(label);
+    dlg.show();
+    QApplication::processEvents();
+
+    QNetworkAccessManager nam;
+    QNetworkRequest req{QUrl(url)};
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    QNetworkReply* reply = nam.get(req);
+
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::readyRead, [&]{
+        file.write(reply->readAll());
+    });
+    QObject::connect(reply, &QNetworkReply::downloadProgress, [&](qint64 r, qint64 t){
+        dlg.setProgress(r, t);
+        QApplication::processEvents();
+    });
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    file.write(reply->readAll());      // reliquat éventuel
+    file.close();
+
+    const bool ok = (reply->error() == QNetworkReply::NoError);
+    reply->deleteLater();
+    if (!ok) QFile::remove(dest);
+    return ok;
 }
 
 QString AppController::getBrewPrefix()

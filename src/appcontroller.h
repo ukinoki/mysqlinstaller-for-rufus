@@ -41,6 +41,9 @@ private:
     bool    upgradeMySQL();
     bool    installFromDmg(const QString& dmgPath);
     QString downloadOracleDmg();
+    //  Télécharge url -> dest avec barre de progression (vrai pourcentage).
+    bool    downloadFile(const QString& url, const QString& dest,
+                         const QString& label);
     void    stopMySQL();
     bool    startMySQL();
     bool    waitForMySQL(int maxSeconds = 30);

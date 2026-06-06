@@ -1,4 +1,4 @@
-QT += core gui widgets sql svg
+QT += core gui widgets sql svg network
 
 CONFIG += c++17
 
