@@ -54,16 +54,19 @@ static inline QString NUL()
 //  Démarre « cmd » dans le shell système.
 //
 //  Sous Windows, on passe la ligne de commande TELLE QUELLE à cmd.exe via
-//  setNativeArguments(). Sinon, QProcess ré-échappe les guillemets selon les
-//  règles du runtime C (différentes de celles de cmd.exe), ce qui corrompt
-//  toute commande contenant des guillemets imbriqués (reg query, powershell,
-//  chemins entre guillemets…). C'était la cause d'une série de bugs Windows
-//  (détection admin, VC++ Redistributable, écriture du PATH…).
+//  setNativeArguments() (QProcess ré-échapperait sinon les guillemets selon les
+//  règles du runtime C, différentes de cmd.exe). De plus, on encadre toute la
+//  commande d'une paire de guillemets externe : cmd.exe /C retire le premier et
+//  le dernier guillemet dès qu'il y en a plus de deux ; sans cet encadrement,
+//  une commande combinant un chemin quoté ET des arguments quotés (ex.
+//  « "…mysqladmin.exe" -u "login" -p"pass" ») serait corrompue. Avec
+//  « /C "…" », cmd retire la paire externe et exécute l'intérieur verbatim.
+//  C'était la cause d'une série de bugs Windows (admin, VC++, connexion MySQL…).
 static inline void startShellProcess(QProcess& p, const QString& cmd)
 {
 #if defined(Q_OS_WIN)
     p.setProgram("cmd.exe");
-    p.setNativeArguments("/C " + cmd);
+    p.setNativeArguments("/C \"" + cmd + "\"");
     p.start();
 #else
     p.start(shellProgram(), shellArgs(cmd));
