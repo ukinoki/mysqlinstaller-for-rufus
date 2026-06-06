@@ -4,6 +4,11 @@
 #include <QApplication>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QStyle>
 #include <QProcess>
 #include <QEventLoop>
 #include <QTimer>
@@ -1338,15 +1343,46 @@ QString AppController::getCnfPath()
 //  resteraient en anglais (texte issu des traductions Qt, non chargées).
 bool AppController::askYesNo(const QString& title, const QString& text)
 {
-    QMessageBox box(m_dialog);
-    box.setIcon(QMessageBox::Question);
-    box.setWindowTitle(title);
-    box.setText(text);
-    QPushButton* yes = box.addButton(tr("Oui"), QMessageBox::YesRole);
-    box.addButton(tr("Non"), QMessageBox::NoRole);
-    box.setDefaultButton(yes);
-    box.exec();
-    return box.clickedButton() == yes;
+    // Dialogue construit à la main (et non QMessageBox) pour garantir un ordre
+    // de boutons IDENTIQUE sur toutes les plateformes — convention Rufus : bouton
+    // principal (« Oui ») en bas à droite, « Non » à sa gauche. QMessageBox
+    // aurait inversé l'ordre selon l'OS.
+    QDialog dlg(m_dialog);
+    dlg.setWindowTitle(title);
+    dlg.setModal(true);
+    dlg.setMinimumWidth(380);
+
+    auto* root = new QVBoxLayout(&dlg);
+    root->setContentsMargins(20, 18, 20, 16);
+    root->setSpacing(18);
+
+    // Ligne icône + message.
+    auto* top  = new QHBoxLayout();
+    auto* icon = new QLabel();
+    icon->setPixmap(dlg.style()->standardIcon(QStyle::SP_MessageBoxQuestion)
+                        .pixmap(40, 40));
+    icon->setAlignment(Qt::AlignTop);
+    auto* msg = new QLabel(text);
+    msg->setWordWrap(true);
+    top->addWidget(icon);
+    top->addSpacing(14);
+    top->addWidget(msg, 1);
+    root->addLayout(top);
+
+    // Rangée de boutons : [stretch][Non][Oui].
+    auto* row = new QHBoxLayout();
+    auto* no  = new QPushButton(tr("Non"));
+    auto* yes = new QPushButton(tr("Oui"));
+    yes->setDefault(true);
+    row->addStretch();
+    row->addWidget(no);
+    row->addWidget(yes);
+    root->addLayout(row);
+
+    QObject::connect(yes, &QPushButton::clicked, &dlg, &QDialog::accept);
+    QObject::connect(no,  &QPushButton::clicked, &dlg, &QDialog::reject);
+
+    return dlg.exec() == QDialog::Accepted;
 }
 
 QString AppController::runCmd(const QString& cmd, int timeoutMs)
