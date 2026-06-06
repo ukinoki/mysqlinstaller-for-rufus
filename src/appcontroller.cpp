@@ -637,24 +637,118 @@ bool AppController::installFromDmg(const QString& dmgPath)
 bool AppController::installMySQL()
 {
 #if defined(Q_OS_WIN)
-    const QString url = "https://dev.mysql.com/get/Downloads/MySQL-8.4/"
-                        "mysql-8.4.3-winx64.msi";
-    const QString msi = QDir::tempPath() + "/mysql-8.4.3-winx64.msi";
+    // ── Installation Windows par archive ZIP (entièrement scriptable) ─────────
+    //  Le MSI autonome ne configure ni le service ni le datadir : on procède donc
+    //  par ZIP, puis « mysqld --initialize-insecure » (crée root@localhost SANS
+    //  mot de passe, ce que createUser() suppose), enregistrement et démarrage du
+    //  service. On cible la 8.4.9 (LTS courante).
+    const QString version  = "8.4.9";
+    const QString zipName  = "mysql-" + version + "-winx64.zip";
+    const QString innerDir = "mysql-" + version + "-winx64";   // dossier racine du zip
+    const QString url      = "https://dev.mysql.com/get/Downloads/MySQL-8.4/" + zipName;
+    const QString zipPath  = QDir::tempPath() + "/" + zipName;
+    const QString extract  = QDir::tempPath() + "/mysql_extract";
 
-    runLongOp(QString("curl -fSL -o \"%1\" \"%2\"").arg(msi, url),
-              tr("Téléchargement de MySQL 8.4.3 (Windows)…"), 600000);
-    if (!QFile::exists(msi))
+    const QString base     = "C:/Program Files/MySQL/MySQL Server 8.4";
+    const QString progData = "C:/ProgramData/MySQL/MySQL Server 8.4";
+    const QString dataDir  = progData + "/Data";
+    const QString cnfPath  = progData + "/my.ini";
+    const QString mysqld   = base + "/bin/mysqld.exe";
+
+    //  Lit le journal d'erreur le plus récent du serveur (datadir/*.err).
+    auto lastErrLog = [&]() -> QString {
+        const auto errs = QDir(dataDir).entryInfoList(
+            {"*.err"}, QDir::Files, QDir::Time);
+        if (errs.isEmpty()) return {};
+        QFile lf(errs.first().absoluteFilePath());
+        if (!lf.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+        return QString::fromLocal8Bit(lf.readAll()).right(1500);
+    };
+
+    // 0. Nettoyage défensif (autorise les ré-essais) : service + installation
+    //    partielle éventuels.
+    runCmdFull("net stop MySQL " + NUL());
+    runCmdFull("sc delete MySQL " + NUL());
+    runCmd(QString("powershell -NoProfile -Command \""
+        "Remove-Item -LiteralPath '%1','%2','%3' -Recurse -Force "
+        "-ErrorAction SilentlyContinue\"")
+        .arg(QDir::toNativeSeparators(base),
+             QDir::toNativeSeparators(progData),
+             QDir::toNativeSeparators(extract)));
+
+    // 1. Téléchargement de l'archive ZIP (~250 Mo).
+    runLongOp(QString("curl -fSL -o \"%1\" \"%2\"")
+              .arg(QDir::toNativeSeparators(zipPath), url),
+              tr("Téléchargement de MySQL %1…").arg(version), 1800000);
+    if (!QFile::exists(zipPath) || QFileInfo(zipPath).size() < 1'000'000LL) {
+        QFile::remove(zipPath);
+        QMessageBox::critical(nullptr, tr("Téléchargement échoué"),
+            tr("Impossible de télécharger MySQL %1 depuis dev.mysql.com.\n"
+               "Vérifiez votre connexion Internet.").arg(version));
         return false;
+    }
 
-    // Installation silencieuse (l'application est déjà élevée).
-    runLongOp(QString("msiexec /i \"%1\" /quiet /norestart").arg(msi),
-              tr("Installation de MySQL 8.4.3…"), 600000);
-    QFile::remove(msi);
+    // 2. Extraction puis déplacement vers le dossier d'installation final.
+    runLongOp(QString("powershell -NoProfile -Command \""
+        "Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force; "
+        "New-Item -ItemType Directory -Force -Path 'C:\\Program Files\\MySQL' "
+        "| Out-Null; "
+        "Move-Item -LiteralPath '%2\\%3' -Destination '%4' -Force\"")
+        .arg(QDir::toNativeSeparators(zipPath), QDir::toNativeSeparators(extract),
+             innerDir, QDir::toNativeSeparators(base)),
+        tr("Extraction de MySQL…"), 600000);
+    QFile::remove(zipPath);
+    if (!QFile::exists(mysqld)) {
+        QMessageBox::critical(nullptr, tr("Extraction échouée"),
+            tr("L'archive MySQL n'a pas pu être extraite (mysqld.exe introuvable)."));
+        return false;
+    }
 
-    // À VALIDER côté Windows : selon le paquet, l'initialisation du datadir et
-    // l'enregistrement du service (« mysqld --initialize-insecure » puis
-    // « mysqld --install MySQL --defaults-file=my.ini ») peuvent être requis ici.
-    return isMySQLInstalled();
+    // 3. Fichier de configuration minimal (basedir + datadir).
+    QDir().mkpath(progData);
+    {
+        QFile f(cnfPath);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QMessageBox::critical(nullptr, tr("Configuration échouée"),
+                tr("Impossible d'écrire %1.").arg(QDir::toNativeSeparators(cnfPath)));
+            return false;
+        }
+        QTextStream ts(&f);
+        ts << "[mysqld]\n"
+           << "basedir=" << base    << "\n"
+           << "datadir=" << dataDir << "\n"
+           << "port=3306\n";
+    }
+
+    // 4. Initialisation du datadir (crée root@localhost SANS mot de passe).
+    runLongOp(QString("\"%1\" --defaults-file=\"%2\" --initialize-insecure --console")
+              .arg(QDir::toNativeSeparators(mysqld), QDir::toNativeSeparators(cnfPath)),
+              tr("Initialisation de MySQL…"), 300000);
+    if (!QFile::exists(dataDir + "/mysql")) {     // schéma système créé ?
+        QMessageBox::critical(nullptr, tr("Initialisation échouée"),
+            tr("L'initialisation du datadir MySQL a échoué.\n\n%1").arg(lastErrLog()));
+        return false;
+    }
+
+    // 5. Enregistrement et démarrage du service Windows.
+    runCmdElevated(QString("\"%1\" --install MySQL --defaults-file=\"%2\"")
+                   .arg(QDir::toNativeSeparators(mysqld),
+                        QDir::toNativeSeparators(cnfPath)));
+    runCmdElevated("net start MySQL");
+
+    if (!isMySQLInstalled()) {
+        QMessageBox::critical(nullptr, tr("Installation incomplète"),
+            tr("Les fichiers MySQL sont en place mais l'installation n'est pas "
+               "détectée correctement."));
+        return false;
+    }
+    if (!waitForMySQL(30)) {
+        QMessageBox::critical(nullptr, tr("Démarrage du service échoué"),
+            tr("MySQL est installé mais le service n'a pas démarré.\n\n%1")
+            .arg(lastErrLog()));
+        return false;
+    }
+    return true;
 #elif defined(Q_OS_LINUX)
     // Installation via apt-get (droits root → pkexec, avec dialogue de progression).
     runLongOp(
