@@ -111,6 +111,7 @@ MySQLRemoteConfig AppController::defaultMySQLConfig()
 {
     MySQLRemoteConfig c;
     c.version     = "8.4.9";
+    c.minVersion  = "8.4.3";
     c.winUrl      = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-winx64.zip";
     c.macArm64Url = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-macos14-arm64.dmg";
     c.macX86Url   = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-macos14-x86_64.dmg";
@@ -150,6 +151,7 @@ MySQLRemoteConfig AppController::fetchRemoteConfig()
         const QJsonObject obj = QJsonDocument::fromJson(data).object();
         if (!obj.isEmpty()) {
             if (obj.contains("mysql_version"))  m_remoteConfig.version     = obj["mysql_version"].toString();
+            if (obj.contains("min_version"))     m_remoteConfig.minVersion  = obj["min_version"].toString();
             if (obj.contains("win_url"))         m_remoteConfig.winUrl      = obj["win_url"].toString();
             if (obj.contains("mac_arm64_url"))   m_remoteConfig.macArm64Url = obj["mac_arm64_url"].toString();
             if (obj.contains("mac_x86_url"))     m_remoteConfig.macX86Url   = obj["mac_x86_url"].toString();
@@ -403,15 +405,19 @@ void AppController::run()
 
     const bool installed = isMySQLInstalled();
 
+    // Config distante (version cible + seuil minimal). Le dialogue affiche le
+    // seuil dans le libellé de la case « MySQL ≥ <min> installé ».
+    const MySQLRemoteConfig cfg = fetchRemoteConfig();
+    m_dialog->setMinVersion(cfg.minVersion);
+
     if (installed) {
         const QString ver = getMySQLVersion();
-        if (!versionAtLeast(ver, "8.4.3")) {
-            // Version antérieure à 8.4.3 (ou inconnue) : proposer la mise à jour.
-            const QString targetVer = fetchRemoteConfig().version;
+        if (!versionAtLeast(ver, cfg.minVersion)) {
+            // Version antérieure au seuil (ou inconnue) : proposer la mise à jour.
             if (!askYesNo(tr("Mise à jour MySQL"),
                     tr("MySQL %1 est installé.\n"
                        "Voulez-vous le mettre à jour vers la version %2 ?")
-                        .arg(ver.isEmpty() ? tr("(version inconnue)") : ver, targetVer))) {
+                        .arg(ver.isEmpty() ? tr("(version inconnue)") : ver, cfg.version))) {
                 qApp->quit(); return;
             }
             if (!upgradeMySQL()) {
@@ -426,7 +432,6 @@ void AppController::run()
         if (!isServerRunning()) startMySQL();
     } else {
         // ── MySQL absent : demander la permission d'installer ─────────────────
-        const MySQLRemoteConfig cfg = fetchRemoteConfig();
         if (!askYesNo(tr("Installation de MySQL"),
                 tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
                    "Voulez-vous l'installer maintenant (version %1) ?").arg(cfg.version))) {
@@ -479,10 +484,11 @@ void AppController::onCredentialsAccepted()
     m_dialog->uncheckAllSteps();
     m_dialog->clearError();
 
-    // ── Étape 1 : MySQL 8.4.3 ou ultérieur présent ────────────────────────
-    if (!isMySQLInstalled() || !versionAtLeast(getMySQLVersion(), "8.4.3")) {
+    // ── Étape 1 : MySQL au seuil minimal (ou ultérieur) présent ───────────
+    const QString minVer = fetchRemoteConfig().minVersion;
+    if (!isMySQLInstalled() || !versionAtLeast(getMySQLVersion(), minVer)) {
         m_dialog->setError(
-            tr("MySQL 8.4.3 (ou ultérieur) n'est pas détecté sur ce système."));
+            tr("MySQL %1 (ou ultérieur) n'est pas détecté sur ce système.").arg(minVer));
         m_dialog->setInputsEnabled(true);
         return;
     }

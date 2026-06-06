@@ -164,8 +164,8 @@ O programa será encerrado.</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="404"/>
-        <source>MySQL 8.4.3 (ou ultérieur) n&apos;est pas détecté sur ce système.</source>
-        <translation>MySQL 8.4.3 (ou posterior) não foi detectado neste sistema.</translation>
+        <source>MySQL %1 (ou ultérieur) n&apos;est pas détecté sur ce système.</source>
+        <translation>MySQL %1 (ou posterior) não foi detectado neste sistema.</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="415"/>
@@ -440,8 +440,8 @@ Apenas letras e dígitos são permitidos.</translation>
     </message>
     <message>
         <location filename="../src/pages/credentialsdialog.cpp" line="343"/>
-        <source>MySQL ≥ 8.4.3 installé</source>
-        <translation>MySQL ≥ 8.4.3 instalado</translation>
+        <source>MySQL ≥ %1 installé</source>
+        <translation>MySQL ≥ %1 instalado</translation>
     </message>
     <message>
         <location filename="../src/pages/credentialsdialog.cpp" line="409"/>

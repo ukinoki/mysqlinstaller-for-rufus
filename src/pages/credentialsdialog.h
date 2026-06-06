@@ -27,6 +27,7 @@ public:
     void setInputsEnabled(bool enabled);
     void setMode(Mode mode);        // bascule Verify <-> Create fenêtre visible
     void setStepDetail(int index, const QString& detail);  // libellé révélé (ex. chemin)
+    void setMinVersion(const QString& v);  // seuil affiché : « MySQL ≥ <v> installé »
 
 signals:
     void credentialsAccepted();
@@ -60,6 +61,7 @@ private:
     QPushButton* m_cancelBtn;
     UpCheckBox*  m_steps[6];
     QString      m_stepDetail[6];       // libellé révélé par étape (ex. chemin)
+    QString      m_minVersion = "8.4.3";  // seuil affiché (case 0) ; repli par défaut
 
     // ── Traduction dynamique ───────────────────────────────────────────────
     static QTranslator* s_translator;   // partagé entre instances

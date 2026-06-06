@@ -348,7 +348,7 @@ void CredentialsDialog::uncheckAllSteps()
 QString CredentialsDialog::baseStepLabel(int index) const
 {
     switch (index) {
-    case 0: return tr("MySQL ≥ 8.4.3 installé");
+    case 0: return tr("MySQL ≥ %1 installé").arg(m_minVersion);
     case 1: return tr("Variable d'environnement MySQL OK");
     case 2: return tr("Dossier partagé existe et partagé");
     case 3: return tr("secure_file_priv configuré");
@@ -371,6 +371,13 @@ void CredentialsDialog::setStepDetail(int index, const QString& detail)
     if (index < 0 || index > 5) return;
     m_stepDetail[index] = detail;
     applyStepLabel(index);
+}
+
+void CredentialsDialog::setMinVersion(const QString& v)
+{
+    if (v.isEmpty() || v == m_minVersion) return;
+    m_minVersion = v;
+    applyStepLabel(0);     // rafraîchit le libellé « MySQL ≥ <v> installé »
 }
 
 void CredentialsDialog::setError(const QString& msg)

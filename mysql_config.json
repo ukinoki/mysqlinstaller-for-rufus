@@ -1,5 +1,6 @@
 {
   "mysql_version": "8.4.9",
+  "min_version": "8.4.3",
   "win_url": "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-winx64.zip",
   "mac_arm64_url": "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-macos14-arm64.dmg",
   "mac_x86_url": "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-macos14-x86_64.dmg"

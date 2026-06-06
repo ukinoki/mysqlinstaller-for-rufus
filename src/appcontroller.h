@@ -5,7 +5,8 @@
 #include "pages/credentialsdialog.h"
 
 struct MySQLRemoteConfig {
-    QString version;
+    QString version;       // version cible à installer / proposer en mise à jour
+    QString minVersion;    // version minimale acceptée en mode Verify (seuil)
     QString winUrl;
     QString macArm64Url;
     QString macX86Url;

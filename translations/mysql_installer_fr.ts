@@ -149,7 +149,7 @@ Fermeture du programme.</source>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="404"/>
-        <source>MySQL 8.4.3 (ou ultérieur) n&apos;est pas détecté sur ce système.</source>
+        <source>MySQL %1 (ou ultérieur) n&apos;est pas détecté sur ce système.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -401,7 +401,7 @@ Seuls les lettres et chiffres sont autorisés.</source>
     </message>
     <message>
         <location filename="../src/pages/credentialsdialog.cpp" line="343"/>
-        <source>MySQL ≥ 8.4.3 installé</source>
+        <source>MySQL ≥ %1 installé</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
