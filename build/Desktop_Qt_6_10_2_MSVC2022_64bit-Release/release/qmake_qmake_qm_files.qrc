@@ -1,0 +1,8 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="i18n">
+<file alias="mysql_installer_fr.qm">C:/Users/serge/Documents/GitHub/mysqlinstaller-for-rufus/build/Desktop_Qt_6_10_2_MSVC2022_64bit-Release/release/mysql_installer_fr.qm</file>
+<file alias="mysql_installer_en.qm">C:/Users/serge/Documents/GitHub/mysqlinstaller-for-rufus/build/Desktop_Qt_6_10_2_MSVC2022_64bit-Release/release/mysql_installer_en.qm</file>
+<file alias="mysql_installer_es.qm">C:/Users/serge/Documents/GitHub/mysqlinstaller-for-rufus/build/Desktop_Qt_6_10_2_MSVC2022_64bit-Release/release/mysql_installer_es.qm</file>
+<file alias="mysql_installer_pt.qm">C:/Users/serge/Documents/GitHub/mysqlinstaller-for-rufus/build/Desktop_Qt_6_10_2_MSVC2022_64bit-Release/release/mysql_installer_pt.qm</file>
+</qresource>
+</RCC>
