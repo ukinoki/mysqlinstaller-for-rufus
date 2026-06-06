@@ -32,6 +32,7 @@ signals:
 
 protected:
     void changeEvent(QEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;  // tooltip bouton désactivé
 
 private slots:
     void onConfirmClicked();
@@ -53,6 +54,7 @@ private:
     QGroupBox*   m_stepsGroup;
     QLabel*      m_errorLabel;
     QPushButton* m_okBtn;
+    QWidget*     m_okWrap = nullptr;     // conteneur du bouton (survol si désactivé)
     QPushButton* m_cancelBtn;
     UpCheckBox*  m_steps[6];
 
@@ -61,4 +63,7 @@ private:
 
     bool validateInputs();
     void retranslateUi();
+    void updateOkState();               // (dé)active le bouton selon la validité
+    bool inputsValid() const;           // login 5-15 + mot de passe 5-12 (alphanum.)
+    QString inputCriteria() const;      // texte du tooltip de rappel des critères
 };

@@ -8,6 +8,9 @@
 #include <QApplication>
 #include <QEventLoop>
 #include <QTimer>
+#include <QToolTip>
+#include <QCursor>
+#include <QEvent>
 
 // ── Traducteur partagé (géré par changeLanguage) ──────────────────────────────
 QTranslator* CredentialsDialog::s_translator = nullptr;
@@ -156,14 +159,29 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
     m_okBtn->setDefault(true);     // déclenché par la touche Entrée
     m_cancelBtn = new QPushButton();
 
+    // Conteneur autour du bouton OK : un widget désactivé ne reçoit pas les
+    // événements de survol, donc impossible d'y afficher un tooltip. Le conteneur
+    // (toujours actif) reçoit le survol quand le bouton est désactivé, ce qui
+    // permet d'afficher un tooltip immédiat rappelant les critères de saisie.
+    m_okWrap = new QWidget();
+    auto* okWrapLay = new QHBoxLayout(m_okWrap);
+    okWrapLay->setContentsMargins(0, 0, 0, 0);
+    okWrapLay->addWidget(m_okBtn);
+    m_okWrap->installEventFilter(this);
+
     auto* buttonRow = new QHBoxLayout();
     buttonRow->addStretch();
     buttonRow->addWidget(m_cancelBtn);
-    buttonRow->addWidget(m_okBtn);
+    buttonRow->addWidget(m_okWrap);
     root->addLayout(buttonRow);
 
     connect(m_okBtn,     &QPushButton::clicked, this, &CredentialsDialog::onConfirmClicked);
     connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+
+    // Validité en temps réel : (dé)active le bouton à chaque frappe.
+    connect(m_login,    &QLineEdit::textChanged, this, [this]{ updateOkState(); });
+    connect(m_password, &QLineEdit::textChanged, this, [this]{ updateOkState(); });
+    connect(m_confirm,  &QLineEdit::textChanged, this, [this]{ updateOkState(); });
 
     // Connexion du sélecteur de langue
     connect(langCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -171,6 +189,7 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
 
     // Premier rendu avec la langue courante
     retranslateUi();
+    updateOkState();      // bouton désactivé tant que les champs sont incomplets
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -337,5 +356,39 @@ void CredentialsDialog::setInputsEnabled(bool enabled)
     m_login->setEnabled(enabled);
     m_password->setEnabled(enabled);
     if (m_mode == Mode::Create) m_confirm->setEnabled(enabled);
-    m_okBtn->setEnabled(enabled);
+    // À la réactivation, l'état du bouton dépend de la validité des champs ;
+    // au verrouillage (traitement en cours), il est désactivé.
+    if (enabled) updateOkState();
+    else         m_okBtn->setEnabled(false);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Validité des champs et tooltip de rappel
+// ─────────────────────────────────────────────────────────────────────────────
+bool CredentialsDialog::inputsValid() const
+{
+    // Le validator garantit déjà l'alphanumérique et la longueur maximale
+    // (15 / 12) ; il reste à vérifier la longueur minimale (5).
+    return m_login->text().length()    >= 5
+        && m_password->text().length() >= 5;
+}
+
+QString CredentialsDialog::inputCriteria() const
+{
+    return tr("Login : 5 à 15 caractères alphanumériques.\n"
+              "Mot de passe : 5 à 12 caractères alphanumériques.");
+}
+
+void CredentialsDialog::updateOkState()
+{
+    m_okBtn->setEnabled(inputsValid());
+}
+
+//  Affiche le tooltip de critères quand on survole le bouton désactivé (le
+//  survol arrive sur le conteneur, le bouton désactivé ne recevant pas l'event).
+bool CredentialsDialog::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == m_okWrap && event->type() == QEvent::Enter && !m_okBtn->isEnabled())
+        QToolTip::showText(QCursor::pos(), inputCriteria());
+    return QDialog::eventFilter(obj, event);
 }
