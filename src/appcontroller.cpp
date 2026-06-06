@@ -744,9 +744,15 @@ bool AppController::installMySQL()
     };
 
     // 0. Nettoyage défensif (autorise les ré-essais) : service + installation
-    //    partielle éventuels.
+    //    partielle éventuels. On tue aussi tout mysqld.exe ORPHELIN (lancé hors
+    //    service par une init précédente avortée) : sinon il garde verrouillée
+    //    bin/libcrypto-3.dll, ce qui fait échouer la suppression du dossier puis
+    //    l'extraction (« accès refusé »).
     runCmdFull("net stop MySQL " + NUL());
     runCmdFull("sc delete MySQL " + NUL());
+    runCmdFull("taskkill /F /IM mysqld.exe " + NUL());
+    // Laisser Windows libérer les verrous de fichiers avant de supprimer.
+    runCmd("powershell -NoProfile -Command \"Start-Sleep -Seconds 2\"");
     runCmd(QString("powershell -NoProfile -Command \""
         "Remove-Item -LiteralPath '%1','%2','%3' -Recurse -Force "
         "-ErrorAction SilentlyContinue\"")
