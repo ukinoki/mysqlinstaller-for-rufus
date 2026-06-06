@@ -410,26 +410,26 @@ void AppController::run()
     const MySQLRemoteConfig cfg = fetchRemoteConfig();
     m_dialog->setMinVersion(cfg.minVersion);
 
+    // needInstall : true => (ré)installation nécessaire => passage en mode Create.
+    //   • MySQL absent ;
+    //   • MySQL présent mais trop ancien ET l'utilisateur a accepté la MAJ.
+    bool needInstall = false;
+
     if (installed) {
         const QString ver = getMySQLVersion();
-        if (!versionAtLeast(ver, cfg.minVersion)) {
-            // Version antérieure au seuil (ou inconnue) : proposer la mise à jour.
-            if (!askYesNo(tr("Mise à jour MySQL"),
-                    tr("MySQL %1 est installé.\n"
-                       "Voulez-vous le mettre à jour vers la version %2 ?")
-                        .arg(ver.isEmpty() ? tr("(version inconnue)") : ver, cfg.version))) {
+        if (versionAtLeast(ver, cfg.minVersion)) {
+            // Version conforme : mode Verify, rien à installer.
+            m_freshInstall = false;
+            if (!isServerRunning()) startMySQL();
+        } else {
+            // Version trop ancienne : dialogue de MAJ nécessaire, avec conseil de
+            // sauvegarde. Un clic sur OK fait passer le programme en mode Create
+            // (la MAJ réinstalle MySQL et peut réinitialiser la base).
+            if (!askUpdateConfirmation(ver, cfg.version)) {
                 qApp->quit(); return;
             }
-            if (!upgradeMySQL()) {
-                QMessageBox::critical(m_dialog, tr("Erreur d'installation"),
-                    tr("La mise à jour de MySQL a échoué.\n"
-                       "Vérifiez votre connexion Internet et relancez le programme."));
-                qApp->quit();
-                return;
-            }
+            needInstall = true;
         }
-        m_freshInstall = false;            // mode Verify
-        if (!isServerRunning()) startMySQL();
     } else {
         // ── MySQL absent : demander la permission d'installer ─────────────────
         if (!askYesNo(tr("Installation de MySQL"),
@@ -437,7 +437,10 @@ void AppController::run()
                    "Voulez-vous l'installer maintenant (version %1) ?").arg(cfg.version))) {
             qApp->quit(); return;
         }
+        needInstall = true;
+    }
 
+    if (needInstall) {
         // Pré-requis réseau AVANT le passage en mode Create : sans accès WAN ou
         // si le lien de téléchargement ne se résout pas, l'installation est
         // impossible. checkDownloadConnectivity() affiche le message adéquat.
@@ -456,6 +459,11 @@ void AppController::run()
             qApp->quit();
             return;
         }
+
+        // Cas mise à jour : arrêter l'ancien serveur avant la réinstallation
+        // (sous Windows installMySQL() le refait, mais c'est nécessaire sur
+        // macOS/Linux où l'installeur écrit par-dessus une instance active).
+        if (installed) stopMySQL();
 
         // Bascule en mode Create avant l'installation (titre et bouton adaptés).
         m_dialog->setMode(CredentialsDialog::Mode::Create);
@@ -1002,18 +1010,6 @@ bool AppController::installMySQL()
 #endif
 }
 
-bool AppController::upgradeMySQL()
-{
-    stopMySQL();
-#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
-    return installMySQL();
-#else
-    QString dmg = downloadOracleDmg();
-    if (dmg.isEmpty()) return false;
-    return installFromDmg(dmg);
-#endif
-}
-
 bool AppController::startMySQL()
 {
     QString bin = mysqlBin("mysqladmin");
@@ -1511,6 +1507,58 @@ bool AppController::askYesNo(const QString& title, const QString& text)
 
     QObject::connect(yes, &QPushButton::clicked, &dlg, &QDialog::accept);
     QObject::connect(no,  &QPushButton::clicked, &dlg, &QDialog::reject);
+
+    return dlg.exec() == QDialog::Accepted;
+}
+
+//  Dialogue de mise à jour nécessaire (mode Verify, version trop ancienne).
+//  Avertit que la MAJ réinstalle MySQL et peut réinitialiser la base, conseille
+//  de sauvegarder AU PRÉALABLE, et exige une confirmation explicite. Construit à
+//  la main (boutons traduits, ordre Rufus, icône d'avertissement).
+bool AppController::askUpdateConfirmation(const QString& currentVer,
+                                          const QString& targetVer)
+{
+    QDialog dlg(m_dialog);
+    dlg.setWindowTitle(tr("Mise à jour de MySQL nécessaire"));
+    dlg.setModal(true);
+    dlg.setMinimumWidth(460);
+
+    auto* root = new QVBoxLayout(&dlg);
+    root->setContentsMargins(20, 18, 20, 16);
+    root->setSpacing(18);
+
+    auto* top  = new QHBoxLayout();
+    auto* icon = new QLabel();
+    icon->setPixmap(dlg.style()->standardIcon(QStyle::SP_MessageBoxWarning)
+                        .pixmap(40, 40));
+    icon->setAlignment(Qt::AlignTop);
+    auto* msg = new QLabel(
+        tr("MySQL %1 est installé, mais la version %2 (ou ultérieure) est "
+           "nécessaire.\n\n"
+           "La mise à jour va réinstaller MySQL et peut réinitialiser la base de "
+           "données existante. Sauvegardez vos données AVANT de poursuivre.\n\n"
+           "Ne confirmez que si vos données sont déjà sauvegardées.")
+            .arg(currentVer.isEmpty() ? tr("(version inconnue)") : currentVer,
+                 targetVer));
+    msg->setWordWrap(true);
+    top->addWidget(icon);
+    top->addSpacing(14);
+    top->addWidget(msg, 1);
+    root->addLayout(top);
+
+    // Rangée de boutons : [stretch][Annuler][OK, faire la MAJ …].
+    auto* row    = new QHBoxLayout();
+    auto* cancel = new QPushButton(tr("Annuler"));
+    auto* ok     = new QPushButton(
+        tr("OK, faire la MAJ, les données ont bien été sauvegardées"));
+    cancel->setDefault(true);   // Entrée = Annuler (choix sûr pour une MAJ destructive)
+    row->addStretch();
+    row->addWidget(cancel);
+    row->addWidget(ok);
+    root->addLayout(row);
+
+    QObject::connect(ok,     &QPushButton::clicked, &dlg, &QDialog::accept);
+    QObject::connect(cancel, &QPushButton::clicked, &dlg, &QDialog::reject);
 
     return dlg.exec() == QDialog::Accepted;
 }

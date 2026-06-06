@@ -52,7 +52,6 @@ private:
     bool    ensureMysqlInPath();         // chemin de mysql présent dans PATH (sinon l'ajoute)
     QString getMySQLVersion();
     bool    installMySQL();
-    bool    upgradeMySQL();
     bool    installFromDmg(const QString& dmgPath);
     QString downloadOracleDmg();
     //  Télécharge url -> dest avec barre de progression (vrai pourcentage).
@@ -90,6 +89,10 @@ private:
     //  Question Oui/Non avec boutons explicitement traduits (QMessageBox
     //  instanciée : les boutons standards Yes/No resteraient en anglais).
     bool    askYesNo(const QString& title, const QString& text);
+    //  Dialogue de mise à jour : prévient qu'une MAJ est nécessaire, conseille de
+    //  sauvegarder les données, et propose « OK, faire la MAJ … » / « Annuler ».
+    //  Renvoie true si l'utilisateur confirme (le programme passe alors en Create).
+    bool    askUpdateConfirmation(const QString& currentVer, const QString& targetVer);
     QString runCmd(const QString& cmd, int timeoutMs = 30000);
     QString runCmdFull(const QString& cmd, int timeoutMs = 30000);
     bool    runCmdElevated(const QString& cmd);   // exécution avec droits admin

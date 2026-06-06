@@ -139,6 +139,30 @@ Voulez-vous l&apos;installer maintenant (version %1) ?</source>
 Deseja instalá-lo agora (versão %1)?</translation>
     </message>
     <message>
+        <source>Mise à jour de MySQL nécessaire</source>
+        <translation>Atualização do MySQL necessária</translation>
+    </message>
+    <message>
+        <source>MySQL %1 est installé, mais la version %2 (ou ultérieure) est nécessaire.
+
+La mise à jour va réinstaller MySQL et peut réinitialiser la base de données existante. Sauvegardez vos données AVANT de poursuivre.
+
+Ne confirmez que si vos données sont déjà sauvegardées.</source>
+        <translation>O MySQL %1 está instalado, mas a versão %2 (ou posterior) é necessária.
+
+A atualização reinstalará o MySQL e pode redefinir o banco de dados existente. Faça backup dos seus dados ANTES de continuar.
+
+Confirme apenas se os seus dados já tiverem sido salvos.</translation>
+    </message>
+    <message>
+        <source>OK, faire la MAJ, les données ont bien été sauvegardées</source>
+        <translation>OK, fazer a atualização, os dados já foram salvos</translation>
+    </message>
+    <message>
+        <source>Annuler</source>
+        <translation>Cancelar</translation>
+    </message>
+    <message>
         <source>Pas d&apos;accès réseau</source>
         <translation>Sem acesso à rede</translation>
     </message>

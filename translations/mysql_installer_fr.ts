@@ -128,6 +128,26 @@ Voulez-vous l&apos;installer maintenant (version %1) ?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Mise à jour de MySQL nécessaire</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>MySQL %1 est installé, mais la version %2 (ou ultérieure) est nécessaire.
+
+La mise à jour va réinstaller MySQL et peut réinitialiser la base de données existante. Sauvegardez vos données AVANT de poursuivre.
+
+Ne confirmez que si vos données sont déjà sauvegardées.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>OK, faire la MAJ, les données ont bien été sauvegardées</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Annuler</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Pas d&apos;accès réseau</source>
         <translation type="unfinished"></translation>
     </message>

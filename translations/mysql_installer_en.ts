@@ -139,6 +139,30 @@ Voulez-vous l&apos;installer maintenant (version %1) ?</source>
 Do you want to install it now (version %1)?</translation>
     </message>
     <message>
+        <source>Mise à jour de MySQL nécessaire</source>
+        <translation>MySQL update required</translation>
+    </message>
+    <message>
+        <source>MySQL %1 est installé, mais la version %2 (ou ultérieure) est nécessaire.
+
+La mise à jour va réinstaller MySQL et peut réinitialiser la base de données existante. Sauvegardez vos données AVANT de poursuivre.
+
+Ne confirmez que si vos données sont déjà sauvegardées.</source>
+        <translation>MySQL %1 is installed, but version %2 (or later) is required.
+
+The update will reinstall MySQL and may reset the existing database. Back up your data BEFORE proceeding.
+
+Only confirm if your data has already been backed up.</translation>
+    </message>
+    <message>
+        <source>OK, faire la MAJ, les données ont bien été sauvegardées</source>
+        <translation>OK, perform the update, my data has been backed up</translation>
+    </message>
+    <message>
+        <source>Annuler</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
         <source>Pas d&apos;accès réseau</source>
         <translation>No network access</translation>
     </message>
