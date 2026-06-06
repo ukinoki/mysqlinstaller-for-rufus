@@ -1409,6 +1409,9 @@ bool AppController::downloadFile(const QString& url, const QString& dest,
             QNetworkRequest req{QUrl(url)};
             req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                              QNetworkRequest::NoLessSafeRedirectPolicy);
+            // Forcer HTTP/1.1 : le HTTP/2 de Qt fait parfois échouer un gros
+            // téléchargement en cours de route avec le CDN MySQL.
+            req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
             req.setHeader(QNetworkRequest::UserAgentHeader, "MySQLInstaller/1.0");
             QNetworkReply* reply = nam.get(req);
 
