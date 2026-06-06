@@ -13,6 +13,12 @@
 #include <QTextStream>
 #include <QRegularExpression>
 
+#if defined(Q_OS_WIN)
+#  define WIN32_LEAN_AND_MEAN
+#  define NOMINMAX
+#  include <windows.h>
+#endif
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers d'exécution dépendants de la plateforme (déclarés tôt : utilisés par
 //  de nombreuses méthodes plus bas).
@@ -68,13 +74,21 @@ QString AppController::sharedFolderPath()
 bool AppController::isAdminUser()
 {
 #if defined(Q_OS_WIN)
-    // Le processus est-il élevé (membre du rôle Administrateurs) ?
-    const QString out = runCmd(
-        "powershell -NoProfile -Command "
-        "\"[bool]([Security.Principal.WindowsPrincipal]"
-        "[Security.Principal.WindowsIdentity]::GetCurrent())"
-        ".IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)\"");
-    return out.trimmed().compare("True", Qt::CaseInsensitive) == 0;
+    // Le processus est-il élevé ? On interroge directement le jeton d'accès via
+    // l'API Win32 (TokenElevation), fiable — contrairement à un appel PowerShell
+    // passé par cmd.exe, dont les guillemets imbriqués étaient mal transmis et
+    // faisaient systématiquement échouer la détection.
+    BOOL elevated = FALSE;
+    HANDLE token  = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        TOKEN_ELEVATION elevation;
+        DWORD cb = sizeof(elevation);
+        if (GetTokenInformation(token, TokenElevation, &elevation,
+                                sizeof(elevation), &cb))
+            elevated = elevation.TokenIsElevated;
+        CloseHandle(token);
+    }
+    return elevated;
 #elif defined(Q_OS_LINUX)
     // root, ou membre du groupe « sudo » (Ubuntu) / « admin ».
     if (runCmd("id -u 2>/dev/null").trimmed() == "0")
