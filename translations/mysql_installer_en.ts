@@ -113,9 +113,9 @@ Check your Internet connection and relaunch.</translation>
     <message>
         <location filename="../src/appcontroller.cpp" line="351"/>
         <source>MySQL %1 est installé.
-Voulez-vous le mettre à jour vers la version 8.4.9 ?</source>
+Voulez-vous le mettre à jour vers la version %2 ?</source>
         <translation>MySQL %1 is installed.
-Do you want to update to version 8.4.9?</translation>
+Do you want to update to version %2?</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="358"/>
@@ -133,10 +133,10 @@ Check your Internet connection and restart the program.</translation>
         <location filename="../src/appcontroller.cpp" line="369"/>
         <source>MySQL n&apos;est pas installé sur cet ordinateur.
 
-Voulez-vous l&apos;installer maintenant (version 8.4.9) ?</source>
+Voulez-vous l&apos;installer maintenant (version %1) ?</source>
         <translation>MySQL is not installed on this computer.
 
-Do you want to install it now (version 8.4.9)?</translation>
+Do you want to install it now (version %1)?</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="404"/>
@@ -179,14 +179,14 @@ Check the folder permissions and the FILE privilege of &quot;%2&quot;.</translat
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="658"/>
-        <source>Téléchargement de MySQL 8.4.9 (Oracle)…</source>
-        <translation>Downloading MySQL 8.4.9 (Oracle)…</translation>
+        <source>Téléchargement de MySQL %1 (Oracle)…</source>
+        <translation>Downloading MySQL %1 (Oracle)…</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="705"/>
-        <source>Installation de MySQL 8.4.9 en cours…
+        <source>Installation de MySQL en cours…
 (Autorisez l&apos;opération dans la fenêtre qui s&apos;affiche)</source>
-        <translation>Installing MySQL 8.4.9…
+        <translation>Installing MySQL…
 (Authorize the operation in the window that appears)</translation>
     </message>
     <message>
@@ -416,8 +416,8 @@ Only letters and digits are allowed.</translation>
     </message>
     <message>
         <location filename="../src/pages/credentialsdialog.cpp" line="343"/>
-        <source>MySQL 8.4.9 installé</source>
-        <translation>MySQL 8.4.9 installed</translation>
+        <source>MySQL ≥ 8.4.3 installé</source>
+        <translation>MySQL ≥ 8.4.3 installed</translation>
     </message>
     <message>
         <location filename="../src/pages/credentialsdialog.cpp" line="409"/>

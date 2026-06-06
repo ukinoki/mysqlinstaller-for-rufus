@@ -23,6 +23,8 @@
 #include <QNetworkRequest>
 #include <QUrl>
 #include <QSettings>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #if defined(Q_OS_WIN)
 #  define WIN32_LEAN_AND_MEAN
@@ -98,6 +100,62 @@ static bool versionAtLeast(const QString& ver, const QString& minVer)
         if (va != vb) return va > vb;
     }
     return true;   // égalité exacte => au moins la version minimale
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Config MySQL distante
+// ─────────────────────────────────────────────────────────────────────────────
+MySQLRemoteConfig AppController::defaultMySQLConfig()
+{
+    MySQLRemoteConfig c;
+    c.version     = "8.4.9";
+    c.winUrl      = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-winx64.zip";
+    c.macArm64Url = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-macos14-arm64.dmg";
+    c.macX86Url   = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-macos14-x86_64.dmg";
+    return c;
+}
+
+//  Charge la config MySQL distante la première fois, puis renvoie le cache.
+//  Timeout 5 s ; en cas d'échec, utilise defaultMySQLConfig().
+MySQLRemoteConfig AppController::fetchRemoteConfig()
+{
+    if (m_remoteConfigLoaded)
+        return m_remoteConfig;
+
+    m_remoteConfig = defaultMySQLConfig();    // pré-remplir avec les valeurs de fallback
+
+    const QString configUrl =
+        "https://raw.githubusercontent.com/ukinoki/mysqlinstaller-for-rufus/main/mysql_config.json";
+
+    QNetworkAccessManager nam;
+    QNetworkRequest req{QUrl(configUrl)};
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+    req.setHeader(QNetworkRequest::UserAgentHeader, "MySQLInstaller/1.0");
+    QNetworkReply* reply = nam.get(req);
+
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(reply,   &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout,        &loop, &QEventLoop::quit);
+    timeout.start(5000);
+    loop.exec();
+
+    if (reply->error() == QNetworkReply::NoError) {
+        const QByteArray data = reply->readAll();
+        const QJsonObject obj = QJsonDocument::fromJson(data).object();
+        if (!obj.isEmpty()) {
+            if (obj.contains("mysql_version"))  m_remoteConfig.version     = obj["mysql_version"].toString();
+            if (obj.contains("win_url"))         m_remoteConfig.winUrl      = obj["win_url"].toString();
+            if (obj.contains("mac_arm64_url"))   m_remoteConfig.macArm64Url = obj["mac_arm64_url"].toString();
+            if (obj.contains("mac_x86_url"))     m_remoteConfig.macX86Url   = obj["mac_x86_url"].toString();
+        }
+    }
+    reply->deleteLater();
+    m_remoteConfigLoaded = true;
+    return m_remoteConfig;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,10 +405,11 @@ void AppController::run()
         const QString ver = getMySQLVersion();
         if (!versionAtLeast(ver, "8.4.3")) {
             // Version antérieure à 8.4.3 (ou inconnue) : proposer la mise à jour.
+            const QString targetVer = fetchRemoteConfig().version;
             if (!askYesNo(tr("Mise à jour MySQL"),
                     tr("MySQL %1 est installé.\n"
-                       "Voulez-vous le mettre à jour vers la version 8.4.9 ?")
-                        .arg(ver.isEmpty() ? tr("(version inconnue)") : ver))) {
+                       "Voulez-vous le mettre à jour vers la version %2 ?")
+                        .arg(ver.isEmpty() ? tr("(version inconnue)") : ver, targetVer))) {
                 qApp->quit(); return;
             }
             if (!upgradeMySQL()) {
@@ -365,9 +424,10 @@ void AppController::run()
         if (!isServerRunning()) startMySQL();
     } else {
         // ── MySQL absent : demander la permission d'installer ─────────────────
+        const QString targetVer = fetchRemoteConfig().version;
         if (!askYesNo(tr("Installation de MySQL"),
                 tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
-                   "Voulez-vous l'installer maintenant (version 8.4.9) ?"))) {
+                   "Voulez-vous l'installer maintenant (version %1) ?").arg(targetVer))) {
             qApp->quit(); return;
         }
 
@@ -645,17 +705,16 @@ QString AppController::getMySQLVersion()
 
 QString AppController::downloadOracleDmg()
 {
-    QString arch       = runCmd("uname -m 2>/dev/null").trimmed();
-    QString archSuffix = (arch == "arm64") ? "arm64" : "x86_64";
-    // NB : le suffixe « macos14 » est le palier de build Oracle de la branche
-    // 8.4 ; à confirmer lors du test macOS (peut devenir macos15 selon la version).
-    QString fileName   = QString("mysql-8.4.9-macos14-%1.dmg").arg(archSuffix);
-    QString url        = "https://dev.mysql.com/get/Downloads/MySQL-8.4/" + fileName;
+    const MySQLRemoteConfig cfg = fetchRemoteConfig();
+
+    const QString arch = runCmd("uname -m 2>/dev/null").trimmed();
+    const QString url  = (arch == "arm64") ? cfg.macArm64Url : cfg.macX86Url;
+    const QString fileName = url.section('/', -1);
     QString tmpDmg     = QDir::tempPath() + "/" + fileName;
 
     runLongOp(
         QString("curl -fSL --progress-bar -o '%1' '%2' 2>&1").arg(tmpDmg, url),
-        tr("Téléchargement de MySQL 8.4.9 (Oracle)…"),
+        tr("Téléchargement de MySQL %1 (Oracle)…").arg(cfg.version),
         600000);
 
     if (!QFile::exists(tmpDmg) || QFileInfo(tmpDmg).size() < 1'000'000LL) {
@@ -702,7 +761,7 @@ bool AppController::installFromDmg(const QString& dmgPath)
 
     // Installation avec élévation
     ProgressDialog* dlg = new ProgressDialog(
-        tr("Installation de MySQL 8.4.9 en cours…\n"
+        tr("Installation de MySQL en cours…\n"
            "(Autorisez l'opération dans la fenêtre qui s'affiche)"));
     dlg->show();
     QApplication::processEvents();
@@ -733,11 +792,13 @@ bool AppController::installMySQL()
     //  Le MSI autonome ne configure ni le service ni le datadir : on procède donc
     //  par ZIP, puis « mysqld --initialize-insecure » (crée root@localhost SANS
     //  mot de passe, ce que createUser() suppose), enregistrement et démarrage du
-    //  service. On cible la 8.4.9 (LTS courante).
-    const QString version  = "8.4.9";
-    const QString zipName  = "mysql-" + version + "-winx64.zip";
-    const QString innerDir = "mysql-" + version + "-winx64";   // dossier racine du zip
-    const QString url      = "https://dev.mysql.com/get/Downloads/MySQL-8.4/" + zipName;
+    //  service. La version et l'URL sont lues depuis le fichier JSON distant
+    //  (fallback sur les valeurs codées en dur si réseau indisponible).
+    const MySQLRemoteConfig cfg = fetchRemoteConfig();
+    const QString version  = cfg.version;
+    const QString url      = cfg.winUrl;
+    const QString zipName  = url.section('/', -1);
+    const QString innerDir = zipName.chopped(4);   // retire ".zip" → dossier racine du zip
     const QString zipPath  = QDir::tempPath() + "/" + zipName;
     const QString extract  = QDir::tempPath() + "/mysql_extract";
 

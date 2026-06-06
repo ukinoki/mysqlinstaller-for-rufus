@@ -4,6 +4,13 @@
 #include <QList>
 #include "pages/credentialsdialog.h"
 
+struct MySQLRemoteConfig {
+    QString version;
+    QString winUrl;
+    QString macArm64Url;
+    QString macX86Url;
+};
+
 class AppController : public QObject {
     Q_OBJECT
 public:
@@ -19,6 +26,8 @@ private:
     QString             m_brewPrefix;
     CredentialsDialog*  m_dialog  = nullptr;
     bool                m_freshInstall = false;  // true = MySQL vient d'être installé
+    MySQLRemoteConfig   m_remoteConfig;          // config distante (chargée une seule fois)
+    bool                m_remoteConfigLoaded = false;
 
     // ── Multi-plateforme ───────────────────────────────────────────────────
     QString sharedFolderPath();          // /Users/Shared (macOS) | C:/Users/Public (Windows)
@@ -67,6 +76,10 @@ private:
     bool    setMyCnfVar(const QString& key, const QString& value);
     QString getCnfPath();
     void    restartMySQL();
+
+    // ── Config distante ────────────────────────────────────────────────────
+    static MySQLRemoteConfig defaultMySQLConfig();
+    MySQLRemoteConfig        fetchRemoteConfig();   // JSON distant → fallback sur défaut
 
     // ── Helpers ────────────────────────────────────────────────────────────
     //  Question Oui/Non avec boutons explicitement traduits (QMessageBox

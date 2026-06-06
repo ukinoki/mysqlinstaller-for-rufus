@@ -340,7 +340,7 @@ void CredentialsDialog::uncheckAllSteps()
 QString CredentialsDialog::baseStepLabel(int index) const
 {
     switch (index) {
-    case 0: return tr("MySQL 8.4.9 installé");
+    case 0: return tr("MySQL ≥ 8.4.3 installé");
     case 1: return tr("Variable d'environnement MySQL OK");
     case 2: return tr("Dossier partagé existe et partagé");
     case 3: return tr("secure_file_priv configuré");

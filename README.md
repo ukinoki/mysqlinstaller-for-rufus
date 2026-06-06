@@ -179,6 +179,13 @@ mysql_installer/
 - **Dossier partagé** : helper `AppController::sharedFolderPath()`.
 - **Téléchargements** : `AppController::downloadFile()` (QNetwork + repli `curl`,
   HTTP/1.1 forcé) ; extraction Windows avec barre de % via `runLongOpProgress()`.
+- **Version MySQL cible** : définie dans `mysql_config.json` à la racine du dépôt.
+  Au démarrage, le programme récupère ce fichier (5 s max) depuis GitHub Raw et en
+  extrait la version et les URLs de téléchargement. Si le réseau est indisponible,
+  les valeurs codées en dur dans `AppController::defaultMySQLConfig()` servent de
+  repli. **Pour pointer vers une nouvelle version** (ex. 8.4.10), il suffit de
+  mettre à jour `mysql_config.json` sur la branche `main` — sans recompiler ni
+  redistribuer le binaire.
 
 ---
 

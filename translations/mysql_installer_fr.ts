@@ -106,7 +106,7 @@ Vérifiez votre connexion Internet et relancez.</source>
     <message>
         <location filename="../src/appcontroller.cpp" line="351"/>
         <source>MySQL %1 est installé.
-Voulez-vous le mettre à jour vers la version 8.4.9 ?</source>
+Voulez-vous le mettre à jour vers la version %2 ?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -124,7 +124,7 @@ Vérifiez votre connexion Internet et relancez le programme.</source>
         <location filename="../src/appcontroller.cpp" line="369"/>
         <source>MySQL n&apos;est pas installé sur cet ordinateur.
 
-Voulez-vous l&apos;installer maintenant (version 8.4.9) ?</source>
+Voulez-vous l&apos;installer maintenant (version %1) ?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -166,12 +166,12 @@ Vérifiez les droits du dossier et le privilège FILE de « %2 ».</source>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="658"/>
-        <source>Téléchargement de MySQL 8.4.9 (Oracle)…</source>
+        <source>Téléchargement de MySQL %1 (Oracle)…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="705"/>
-        <source>Installation de MySQL 8.4.9 en cours…
+        <source>Installation de MySQL en cours…
 (Autorisez l&apos;opération dans la fenêtre qui s&apos;affiche)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -381,7 +381,7 @@ Seuls les lettres et chiffres sont autorisés.</source>
     </message>
     <message>
         <location filename="../src/pages/credentialsdialog.cpp" line="343"/>
-        <source>MySQL 8.4.9 installé</source>
+        <source>MySQL ≥ 8.4.3 installé</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

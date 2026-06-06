@@ -113,9 +113,9 @@ Compruebe su conexión a Internet y vuelva a iniciar.</translation>
     <message>
         <location filename="../src/appcontroller.cpp" line="351"/>
         <source>MySQL %1 est installé.
-Voulez-vous le mettre à jour vers la version 8.4.9 ?</source>
+Voulez-vous le mettre à jour vers la version %2 ?</source>
         <translation>MySQL %1 está instalado.
-¿Desea actualizarlo a la versión 8.4.9?</translation>
+¿Desea actualizarlo a la versión %2?</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="358"/>
@@ -133,10 +133,10 @@ Compruebe su conexión a Internet y reinicie el programa.</translation>
         <location filename="../src/appcontroller.cpp" line="369"/>
         <source>MySQL n&apos;est pas installé sur cet ordinateur.
 
-Voulez-vous l&apos;installer maintenant (version 8.4.9) ?</source>
+Voulez-vous l&apos;installer maintenant (version %1) ?</source>
         <translation>MySQL no está instalado en este equipo.
 
-¿Desea instalarlo ahora (versión 8.4.9)?</translation>
+¿Desea instalarlo ahora (versión %1)?</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="404"/>
@@ -179,14 +179,14 @@ Compruebe los permisos de la carpeta y el privilegio FILE de «%2».</translatio
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="658"/>
-        <source>Téléchargement de MySQL 8.4.9 (Oracle)…</source>
-        <translation>Descargando MySQL 8.4.9 (Oracle)…</translation>
+        <source>Téléchargement de MySQL %1 (Oracle)…</source>
+        <translation>Descargando MySQL %1 (Oracle)…</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="705"/>
-        <source>Installation de MySQL 8.4.9 en cours…
+        <source>Installation de MySQL en cours…
 (Autorisez l&apos;opération dans la fenêtre qui s&apos;affiche)</source>
-        <translation>Instalando MySQL 8.4.9…
+        <translation>Instalando MySQL…
 (Autorice la operación en la ventana que aparece)</translation>
     </message>
     <message>
@@ -416,8 +416,8 @@ Solo se permiten letras y dígitos.</translation>
     </message>
     <message>
         <location filename="../src/pages/credentialsdialog.cpp" line="343"/>
-        <source>MySQL 8.4.9 installé</source>
-        <translation>MySQL 8.4.9 instalado</translation>
+        <source>MySQL ≥ 8.4.3 installé</source>
+        <translation>MySQL ≥ 8.4.3 instalado</translation>
     </message>
     <message>
         <location filename="../src/pages/credentialsdialog.cpp" line="409"/>
