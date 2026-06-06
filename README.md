@@ -7,28 +7,49 @@ utilisateur dédié.
 
 Le programme fonctionne en deux phases :
 
-1. **Phase 1 — pré-requis & MySQL** (avant l'interface) : contrôle des droits
-   administrateur, des pré-requis spécifiques à la plateforme, puis détection /
-   installation / mise à jour de **MySQL 8.4.3**.
-2. **Phase 2 — vérification guidée** : une fenêtre demande un identifiant et un
-   mot de passe, puis valide **6 critères** un à un (cases à cocher en direct).
+1. **Phase 1 — démarrage & MySQL** : contrôle des droits administrateur et des
+   pré-requis de la plateforme (gardes fatals), puis la fiche d'identifiants
+   s'ouvre **immédiatement en mode *Verify*, case « MySQL » décochée**. La
+   détection de MySQL se fait alors fenêtre déjà visible :
+   - **MySQL 8.4.3 trouvé** → la case « MySQL » se coche, la saisie se déverrouille ;
+   - **autre version** → proposition de mise à jour ;
+   - **MySQL absent** → la fiche bascule en mode *Create*, le message
+     d'installation apparaît, l'installation se lance, et la case « MySQL » se
+     coche une fois terminée.
+2. **Phase 2 — vérification guidée** : après saisie de l'identifiant et du mot de
+   passe, le programme valide **7 critères** un à un (cases à cocher en direct).
 
 ---
 
-## Les 6 étapes de vérification
+## Les 7 étapes de vérification
 
 | # | Case | Rôle |
 |---|------|------|
-| 0 | **MySQL 8.4.3 installé** | présence et version du serveur |
+| 0 | **MySQL 8.4.3 installé** | présence et version du serveur — **décochée à l'ouverture**, cochée dès que MySQL est trouvé ou installé (cf. phase 1) |
 | 1 | **Variable d'environnement MySQL OK** | le dossier de `mysql` est dans le `PATH` (ajouté sinon) |
 | 2 | **Dossier partagé existe et partagé** | le dossier d'échange existe et est partagé sur le réseau |
-| 3 | **secure_file_priv configuré** | `secure_file_priv` pointe sur le dossier partagé |
-| 4 | **Lecture / écriture mysql vérifiée** | le serveur écrit puis relit un fichier test dans le dossier partagé |
-| 5 | **Droits utilisateurs confirmés** | l'utilisateur possède `ALL PRIVILEGES` + `GRANT OPTION` |
+| 3 | **Création / Contrôle utilisateur** | mode *Create* : utilisateur créé (« Création utilisateur → *login* créé ») ; mode *Verify* : connexion validée avec les identifiants saisis (« Contrôle utilisateur → *login* reconnu ») |
+| 4 | **secure_file_priv configuré** | `secure_file_priv` pointe sur le dossier partagé |
+| 5 | **Lecture / écriture mysql vérifiée** | le serveur écrit puis relit un fichier test dans le dossier partagé |
+| 6 | **Droits utilisateurs confirmés** | l'utilisateur possède `ALL PRIVILEGES` + `GRANT OPTION` |
 
 > En mode *Create*, l'utilisateur est créé avec `GRANT ALL PRIVILEGES ON *.* …
 > WITH GRANT OPTION`. Le mot de passe n'est jamais écrit sur disque (les requêtes
 > passent par `-e`, et les scripts privilégiés temporaires sont supprimés).
+
+> **Saisie** : le bouton de validation (*Vérifier* / *Créer l'utilisateur*) reste
+> désactivé tant que le login (5–15) et le mot de passe (5–12) ne sont pas
+> alphanumériques au bon format ; un tooltip de rappel s'affiche au survol.
+> La connexion à MySQL se fait via les binaires `mysql`/`mysqladmin` (aucune
+> dépendance à `libmysqlclient` ni au pilote Qt `QMYSQL`).
+
+La barre de titre de la fenêtre est **« Paramétrage de MySQL pour l'exécution de
+Rufus »**. Le titre et le sous-titre internes s'adaptent au mode :
+
+| Mode | Titre (gras) | Sous-titre | Bouton |
+|------|--------------|------------|--------|
+| *Create* (installation neuve) | Installation de MySQL | Saisissez les identifiants de l'utilisateur que vous voulez créer | Créer l'utilisateur |
+| *Verify* (MySQL déjà présent) | Connexion à MySQL | Saisissez vos identifiants MySQL. | Vérifier |
 
 L'interface est traduite en **français** (source), **anglais**, **espagnol** et
 **portugais** (sélecteur de langue en haut de la fenêtre).
@@ -42,7 +63,7 @@ Tout le code spécifique est isolé par compilation conditionnelle
 
 | | macOS | Windows 10/11 | Ubuntu (> 22.04) |
 |---|---|---|---|
-| Pré-requis | macOS ≥ 12 | **Visual C++ Redistributable 2022** (installé au besoin) | version Ubuntu vérifiée |
+| Pré-requis | macOS ≥ 13 (Ventura ; imposé par Qt 6.10) | **Visual C++ Redistributable 2022** (installé au besoin) | version Ubuntu vérifiée |
 | Droits admin | groupe `admin` (+ `osascript` pour l'élévation) | processus **élevé** (manifeste UAC) | groupe `sudo`/root (+ **`pkexec`**) |
 | Installation MySQL | DMG Oracle + `installer` | MSI + `msiexec /quiet` | **`apt-get install mysql-server`** |
 | Service | `launchctl` / `brew services` | `net start/stop MySQL` | `systemctl … mysql` |
@@ -58,8 +79,12 @@ Tout le code spécifique est isolé par compilation conditionnelle
 
 ## Prérequis de build
 
-- **Qt 6.x** (modules : `widgets`, `sql`, `svg`)
+- **Qt 6.x** (modules : `core`, `gui`, `widgets`, `svg`, `network`)
 - Un compilateur C++17 (Xcode/clang sur macOS, MSVC sur Windows, g++ sur Linux)
+
+> Le module Qt `sql` **n'est pas utilisé** : l'application dialogue avec MySQL
+> exclusivement via les outils en ligne de commande (`mysql`, `mysqladmin`,
+> `mysqld`). Inutile donc d'embarquer `libmysqlclient` ou le plugin `sqldrivers`.
 
 ---
 
@@ -126,7 +151,10 @@ mysql_installer/
   (`ensureMysqlInPath`, `setupSharedFolder`, `ensureSecureFilePriv`,
   `testSharedFolderRW`, `checkPrivileges`…).
 - **Libellés des cases** : tableau `stepLabels[]` dans
-  `credentialsdialog.cpp` (puis `lupdate`/`lrelease` pour les traductions).
+  `credentialsdialog.cpp`. Les cases « Dossier partagé » et « Création / Contrôle
+  utilisateur » ont un libellé dynamique révélé une fois cochées (chemin, ou
+  `userStepBase()` / `userStepLabel()` pour le login). Penser à
+  `lupdate`/`lrelease` après toute modification de texte.
 - **Dossier partagé** : helper `AppController::sharedFolderPath()`.
 
 ---
