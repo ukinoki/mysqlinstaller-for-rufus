@@ -42,6 +42,10 @@ win32 {
     # Application fenêtrée (pas de console).
     CONFIG -= console
 
+    # API Win32 utilisées par le code (détection d'élévation : OpenProcessToken,
+    # GetTokenInformation) → bibliothèque advapi32.
+    LIBS += -ladvapi32
+
     # L'application doit s'exécuter en tant qu'administrateur. Plutôt que le
     # drapeau /MANIFESTUAC (spécifique à link.exe / MSVC et délicat à échapper),
     # on embarque notre propre manifeste via une ressource .rc — portable MSVC
