@@ -1389,44 +1389,55 @@ void AppController::runLongOp(const QString& cmd, const QString& label, int time
     delete dlg;
 }
 
-//  Téléchargement HTTP(S) avec barre de progression (vrai pourcentage), via
-//  QNetworkAccessManager (suit les redirections ; HTTPS géré nativement —
-//  Schannel sous Windows, Secure Transport sous macOS).
+//  Téléchargement HTTP(S) robuste :
+//   1. via QNetworkAccessManager → vraie barre de progression (pourcentage) ;
+//   2. en cas d'échec (backend TLS Qt absent, rejet du CDN…), repli automatique
+//      sur curl, qui utilise le TLS du système (Schannel/Secure Transport) et
+//      suit les redirections — barre animée.
 bool AppController::downloadFile(const QString& url, const QString& dest,
                                  const QString& label)
 {
-    QFile file(dest);
-    if (!file.open(QIODevice::WriteOnly))
-        return false;
+    // ── Tentative 1 : QNetworkAccessManager (progression réelle) ──────────────
+    {
+        QFile file(dest);
+        if (file.open(QIODevice::WriteOnly)) {
+            ProgressDialog dlg(label);
+            dlg.show();
+            QApplication::processEvents();
 
-    ProgressDialog dlg(label);
-    dlg.show();
-    QApplication::processEvents();
+            QNetworkAccessManager nam;
+            QNetworkRequest req{QUrl(url)};
+            req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                             QNetworkRequest::NoLessSafeRedirectPolicy);
+            req.setHeader(QNetworkRequest::UserAgentHeader, "MySQLInstaller/1.0");
+            QNetworkReply* reply = nam.get(req);
 
-    QNetworkAccessManager nam;
-    QNetworkRequest req{QUrl(url)};
-    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                     QNetworkRequest::NoLessSafeRedirectPolicy);
-    QNetworkReply* reply = nam.get(req);
+            QEventLoop loop;
+            QObject::connect(reply, &QNetworkReply::readyRead, [&]{
+                file.write(reply->readAll());
+            });
+            QObject::connect(reply, &QNetworkReply::downloadProgress,
+                             [&](qint64 r, qint64 t){
+                dlg.setProgress(r, t);
+                QApplication::processEvents();
+            });
+            QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+            loop.exec();
 
-    QEventLoop loop;
-    QObject::connect(reply, &QNetworkReply::readyRead, [&]{
-        file.write(reply->readAll());
-    });
-    QObject::connect(reply, &QNetworkReply::downloadProgress, [&](qint64 r, qint64 t){
-        dlg.setProgress(r, t);
-        QApplication::processEvents();
-    });
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
+            file.write(reply->readAll());      // reliquat éventuel
+            file.close();
+            const bool ok = (reply->error() == QNetworkReply::NoError);
+            reply->deleteLater();
+            if (ok && QFileInfo(dest).size() > 0)
+                return true;
+        }
+    }
 
-    file.write(reply->readAll());      // reliquat éventuel
-    file.close();
-
-    const bool ok = (reply->error() == QNetworkReply::NoError);
-    reply->deleteLater();
-    if (!ok) QFile::remove(dest);
-    return ok;
+    // ── Tentative 2 : repli sur curl (TLS du système) ─────────────────────────
+    QFile::remove(dest);
+    runLongOp(QString("curl -fSL -o \"%1\" \"%2\"")
+              .arg(QDir::toNativeSeparators(dest), url), label, 1800000);
+    return QFile::exists(dest) && QFileInfo(dest).size() > 0;
 }
 
 QString AppController::getBrewPrefix()
