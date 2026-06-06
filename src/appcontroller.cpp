@@ -51,6 +51,25 @@ static inline QString NUL()
 #endif
 }
 
+//  Démarre « cmd » dans le shell système.
+//
+//  Sous Windows, on passe la ligne de commande TELLE QUELLE à cmd.exe via
+//  setNativeArguments(). Sinon, QProcess ré-échappe les guillemets selon les
+//  règles du runtime C (différentes de celles de cmd.exe), ce qui corrompt
+//  toute commande contenant des guillemets imbriqués (reg query, powershell,
+//  chemins entre guillemets…). C'était la cause d'une série de bugs Windows
+//  (détection admin, VC++ Redistributable, écriture du PATH…).
+static inline void startShellProcess(QProcess& p, const QString& cmd)
+{
+#if defined(Q_OS_WIN)
+    p.setProgram("cmd.exe");
+    p.setNativeArguments("/C " + cmd);
+    p.start();
+#else
+    p.start(shellProgram(), shellArgs(cmd));
+#endif
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 AppController::AppController(QObject* parent)
     : QObject(parent)
@@ -1095,7 +1114,7 @@ QString AppController::getCnfPath()
 QString AppController::runCmd(const QString& cmd, int timeoutMs)
 {
     QProcess p;
-    p.start(shellProgram(), shellArgs(cmd));
+    startShellProcess(p, cmd);
     p.waitForFinished(timeoutMs);
     return p.readAllStandardOutput().trimmed();
 }
@@ -1104,7 +1123,7 @@ QString AppController::runCmdFull(const QString& cmd, int timeoutMs)
 {
     QProcess p;
     p.setProcessChannelMode(QProcess::MergedChannels);
-    p.start(shellProgram(), shellArgs(cmd));
+    startShellProcess(p, cmd);
     p.waitForFinished(timeoutMs);
     return p.readAllStandardOutput().trimmed();
 }
@@ -1171,7 +1190,7 @@ void AppController::runLongOp(const QString& cmd, const QString& label, int time
     timeout.setSingleShot(true);
     QObject::connect(&proc,    &QProcess::finished, &loop, &QEventLoop::quit);
     QObject::connect(&timeout, &QTimer::timeout,    [&]{ proc.kill(); loop.quit(); });
-    proc.start(shellProgram(), shellArgs(cmd));
+    startShellProcess(proc, cmd);
     if (timeoutMs > 0) timeout.start(timeoutMs);
     loop.exec();
 
