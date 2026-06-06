@@ -13,6 +13,7 @@
 #include <QEventLoop>
 #include <QTimer>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QTextStream>
@@ -263,6 +264,17 @@ void AppController::registerWindowsUninstaller(const QString& base,
         QString("powershell -NoProfile -ExecutionPolicy Bypass -File \"%1\"").arg(nps));
     reg.setValue("NoModify", 1);
     reg.setValue("NoRepair", 1);
+
+    // Taille installée (Ko) → colonne « Taille » du gestionnaire d'applications.
+    auto dirSizeKB = [](const QString& path) -> quint64 {
+        quint64 total = 0;
+        QDirIterator it(path, QDir::Files | QDir::NoSymLinks,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) { it.next(); total += quint64(it.fileInfo().size()); }
+        return total / 1024;
+    };
+    reg.setValue("EstimatedSize",
+                 uint(dirSizeKB(base) + dirSizeKB(progData)));
 }
 #endif  // Q_OS_WIN
 
