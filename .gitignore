@@ -21,6 +21,3 @@ ui_*.h
 *.pro.user.*
 .qtc_clangd/
 .cache/
-build/Desktop_Qt_6_10_2_MSVC2022_64bit-Release/.qtc_clangd/.cache/clangd/index/qapplication.h.B1390524428D7E11.idx
-/build
-build/Desktop_Qt_6_10_2_MSVC2022_64bit-Release/.qtc_clangd/.cache/clangd/index/qapplication.h.B1390524428D7E11.idx
