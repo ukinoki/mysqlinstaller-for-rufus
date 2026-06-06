@@ -330,13 +330,12 @@ void AppController::run()
         const QString ver = getMySQLVersion();
         if (!versionAtLeast(ver, "8.4.3")) {
             // Version antérieure à 8.4.3 (ou inconnue) : proposer la mise à jour.
-            auto btn = QMessageBox::question(m_dialog,
-                tr("Mise à jour MySQL"),
-                tr("MySQL %1 est installé.\n"
-                   "Voulez-vous le mettre à jour vers la version 8.4.9 ?")
-                    .arg(ver.isEmpty() ? tr("(version inconnue)") : ver),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
-            if (btn == QMessageBox::No) { qApp->quit(); return; }
+            if (!askYesNo(tr("Mise à jour MySQL"),
+                    tr("MySQL %1 est installé.\n"
+                       "Voulez-vous le mettre à jour vers la version 8.4.9 ?")
+                        .arg(ver.isEmpty() ? tr("(version inconnue)") : ver))) {
+                qApp->quit(); return;
+            }
             if (!upgradeMySQL()) {
                 QMessageBox::critical(m_dialog, tr("Erreur d'installation"),
                     tr("La mise à jour de MySQL a échoué.\n"
@@ -349,12 +348,11 @@ void AppController::run()
         if (!isServerRunning()) startMySQL();
     } else {
         // ── MySQL absent : demander la permission d'installer ─────────────────
-        auto btn = QMessageBox::question(m_dialog,
-            tr("Installation de MySQL"),
-            tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
-               "Voulez-vous l'installer maintenant (version 8.4.9) ?"),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
-        if (btn == QMessageBox::No) { qApp->quit(); return; }
+        if (!askYesNo(tr("Installation de MySQL"),
+                tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
+                   "Voulez-vous l'installer maintenant (version 8.4.9) ?"))) {
+            qApp->quit(); return;
+        }
 
         // Bascule en mode Create avant l'installation (titre et bouton adaptés).
         m_dialog->setMode(CredentialsDialog::Mode::Create);
@@ -1302,6 +1300,22 @@ QString AppController::getCnfPath()
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+//  Question Oui/Non. On instancie une QMessageBox avec des boutons explicitement
+//  libellés (tr) : les boutons standards Yes/No de QMessageBox::question()
+//  resteraient en anglais (texte issu des traductions Qt, non chargées).
+bool AppController::askYesNo(const QString& title, const QString& text)
+{
+    QMessageBox box(m_dialog);
+    box.setIcon(QMessageBox::Question);
+    box.setWindowTitle(title);
+    box.setText(text);
+    QPushButton* yes = box.addButton(tr("Oui"), QMessageBox::YesRole);
+    box.addButton(tr("Non"), QMessageBox::NoRole);
+    box.setDefaultButton(yes);
+    box.exec();
+    return box.clickedButton() == yes;
+}
+
 QString AppController::runCmd(const QString& cmd, int timeoutMs)
 {
     QProcess p;

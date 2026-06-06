@@ -69,6 +69,9 @@ private:
     void    restartMySQL();
 
     // ── Helpers ────────────────────────────────────────────────────────────
+    //  Question Oui/Non avec boutons explicitement traduits (QMessageBox
+    //  instanciée : les boutons standards Yes/No resteraient en anglais).
+    bool    askYesNo(const QString& title, const QString& text);
     QString runCmd(const QString& cmd, int timeoutMs = 30000);
     QString runCmdFull(const QString& cmd, int timeoutMs = 30000);
     bool    runCmdElevated(const QString& cmd);   // exécution avec droits admin
