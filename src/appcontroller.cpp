@@ -16,6 +16,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
+#include <QSettings>
 
 #if defined(Q_OS_WIN)
 #  define WIN32_LEAN_AND_MEAN
@@ -202,6 +203,61 @@ bool AppController::installVCRedist2022()
               tr("Installation de Visual C++ Redistributable 2022…"), 300000);
     QFile::remove(exe);
     return isVCRedist2022Installed();
+}
+
+//  Rend MySQL désinstallable depuis « Applications et fonctionnalités » :
+//   1. dépose un script PowerShell de désinstallation AUTO-ÉLEVANT dans le
+//      dossier d'installation ;
+//   2. déclare l'entrée Uninstall du registre via QSettings (NativeFormat) —
+//      aucune gymnastique de guillemets, contrairement à « reg add ».
+void AppController::registerWindowsUninstaller(const QString& base,
+                                               const QString& progData,
+                                               const QString& version)
+{
+    const QString nbase = QDir::toNativeSeparators(base);
+    const QString nprog = QDir::toNativeSeparators(progData);
+    const QString psPath = base + "/uninstall_rufus.ps1";
+    const QString nps    = QDir::toNativeSeparators(psPath);
+    const QString binDir = nbase + "\\bin";
+
+    // 1. Script de désinstallation (PowerShell, ré-élève si lancé sans droits).
+    QFile f(psPath);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream ts(&f);
+        ts << "$ErrorActionPreference = 'SilentlyContinue'\r\n"
+           << "$id = [Security.Principal.WindowsIdentity]::GetCurrent()\r\n"
+           << "$pr = New-Object Security.Principal.WindowsPrincipal($id)\r\n"
+           << "if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {\r\n"
+           << "    Start-Process powershell -Verb RunAs -ArgumentList "
+              "\"-NoProfile -ExecutionPolicy Bypass -File `\"$PSCommandPath`\"\"\r\n"
+           << "    exit\r\n"
+           << "}\r\n"
+           << "Set-Location $env:SystemDrive\\\r\n"
+           << "net stop MySQL\r\n"
+           << "sc.exe delete MySQL\r\n"
+           << "$bin = '" << binDir << "'\r\n"
+           << "$p = [Environment]::GetEnvironmentVariable('Path','Machine')\r\n"
+           << "if ($p) { [Environment]::SetEnvironmentVariable('Path', "
+              "(($p -split ';' | Where-Object { $_ -and $_ -ne $bin }) -join ';'), 'Machine') }\r\n"
+           << "Remove-Item -LiteralPath '" << nbase << "' -Recurse -Force\r\n"
+           << "Remove-Item -LiteralPath '" << nprog << "' -Recurse -Force\r\n"
+           << "Remove-Item -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion"
+              "\\Uninstall\\MySQLForRufus' -Recurse -Force\r\n";
+        f.close();
+    }
+
+    // 2. Entrée « Applications et fonctionnalités ».
+    QSettings reg("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion"
+                  "\\Uninstall\\MySQLForRufus", QSettings::NativeFormat);
+    reg.setValue("DisplayName",     QString("MySQL %1 (pour Rufus)").arg(version));
+    reg.setValue("DisplayVersion",  version);
+    reg.setValue("Publisher",       "Rufus");
+    reg.setValue("InstallLocation", nbase);
+    reg.setValue("DisplayIcon",     binDir + "\\mysqld.exe");
+    reg.setValue("UninstallString",
+        QString("powershell -NoProfile -ExecutionPolicy Bypass -File \"%1\"").arg(nps));
+    reg.setValue("NoModify", 1);
+    reg.setValue("NoRepair", 1);
 }
 #endif  // Q_OS_WIN
 
@@ -762,6 +818,9 @@ bool AppController::installMySQL()
             .arg(lastErrLog()));
         return false;
     }
+
+    // Rendre MySQL désinstallable depuis « Applications et fonctionnalités ».
+    registerWindowsUninstaller(base, progData, version);
     return true;
 #elif defined(Q_OS_LINUX)
     // Installation via apt-get (droits root → pkexec, avec dialogue de progression).

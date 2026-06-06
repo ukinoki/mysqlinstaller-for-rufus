@@ -28,6 +28,10 @@ private:
 #if defined(Q_OS_WIN)
     bool    isVCRedist2022Installed();   // Windows : Visual C++ Redistributable 2022
     bool    installVCRedist2022();
+    //  Déclare MySQL dans « Applications et fonctionnalités » + script de désinstall.
+    void    registerWindowsUninstaller(const QString& base,
+                                       const QString& progData,
+                                       const QString& version);
 #endif
 #if defined(Q_OS_LINUX)
     bool    isUbuntuVersionSupported();  // Ubuntu > 22.04 ?
