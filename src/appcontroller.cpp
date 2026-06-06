@@ -647,13 +647,15 @@ QString AppController::downloadOracleDmg()
 {
     QString arch       = runCmd("uname -m 2>/dev/null").trimmed();
     QString archSuffix = (arch == "arm64") ? "arm64" : "x86_64";
-    QString fileName   = QString("mysql-8.4.3-macos14-%1.dmg").arg(archSuffix);
+    // NB : le suffixe « macos14 » est le palier de build Oracle de la branche
+    // 8.4 ; à confirmer lors du test macOS (peut devenir macos15 selon la version).
+    QString fileName   = QString("mysql-8.4.9-macos14-%1.dmg").arg(archSuffix);
     QString url        = "https://dev.mysql.com/get/Downloads/MySQL-8.4/" + fileName;
     QString tmpDmg     = QDir::tempPath() + "/" + fileName;
 
     runLongOp(
         QString("curl -fSL --progress-bar -o '%1' '%2' 2>&1").arg(tmpDmg, url),
-        tr("Téléchargement de MySQL 8.4.3 (Oracle)…"),
+        tr("Téléchargement de MySQL 8.4.9 (Oracle)…"),
         600000);
 
     if (!QFile::exists(tmpDmg) || QFileInfo(tmpDmg).size() < 1'000'000LL) {
@@ -700,7 +702,7 @@ bool AppController::installFromDmg(const QString& dmgPath)
 
     // Installation avec élévation
     ProgressDialog* dlg = new ProgressDialog(
-        tr("Installation de MySQL 8.4.3 en cours…\n"
+        tr("Installation de MySQL 8.4.9 en cours…\n"
            "(Autorisez l'opération dans la fenêtre qui s'affiche)"));
     dlg->show();
     QApplication::processEvents();

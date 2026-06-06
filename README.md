@@ -1,9 +1,13 @@
 # MySQL Installer — Qt6 (macOS / Windows / Linux)
 
-Utilitaire graphique Qt qui **installe et prépare MySQL 8.4.3** pour le logiciel
-médical **[Rufus](https://www.rufusvision.org)** : il vérifie (et corrige au
-besoin) tout ce dont Rufus a besoin côté base de données, puis crée le compte
-utilisateur dédié.
+Utilitaire graphique Qt qui **installe et prépare MySQL 8.4.9 (LTS)** pour le
+logiciel médical **[Rufus](https://www.rufusvision.org)** : il vérifie (et corrige
+au besoin) tout ce dont Rufus a besoin côté base de données, puis crée le compte
+utilisateur dédié. Toute version installée **≥ 8.4.3** est acceptée telle quelle ;
+une version absente ou antérieure déclenche l'installation/mise à jour en 8.4.9.
+
+> **Instance unique** (`QLockFile`) : un seul exemplaire du programme peut tourner
+> à la fois.
 
 Le programme fonctionne en deux phases :
 
@@ -11,45 +15,54 @@ Le programme fonctionne en deux phases :
    pré-requis de la plateforme (gardes fatals), puis la fiche d'identifiants
    s'ouvre **immédiatement en mode *Verify*, case « MySQL » décochée**. La
    détection de MySQL se fait alors fenêtre déjà visible :
-   - **MySQL 8.4.3 trouvé** → la case « MySQL » se coche, la saisie se déverrouille ;
-   - **autre version** → proposition de mise à jour ;
-   - **MySQL absent** → la fiche bascule en mode *Create*, le message
-     d'installation apparaît, l'installation se lance, et la case « MySQL » se
-     coche une fois terminée.
+   - **MySQL ≥ 8.4.3 trouvé** → la case « MySQL » se coche, la saisie se déverrouille ;
+   - **version antérieure** → proposition de mise à jour (boîte **Oui/Non**) ;
+   - **MySQL absent** → une boîte demande la **permission d'installer** ; si acceptée,
+     la fiche bascule en mode *Create*, l'installation se lance (téléchargement +
+     extraction avec barre de progression, puis initialisation), et la case
+     « MySQL » se coche une fois terminée.
 2. **Phase 2 — vérification guidée** : après saisie de l'identifiant et du mot de
-   passe, le programme valide **7 critères** un à un (cases à cocher en direct).
+   passe, le programme valide **6 critères** un à un (cases à cocher en direct).
 
 ---
 
-## Les 7 étapes de vérification
+## Les 6 étapes de vérification
 
 | # | Case | Rôle |
 |---|------|------|
-| 0 | **MySQL 8.4.3 installé** | présence et version du serveur — **décochée à l'ouverture**, cochée dès que MySQL est trouvé ou installé (cf. phase 1) |
+| 0 | **MySQL 8.4.9 installé** | présence et version du serveur — **décochée à l'ouverture**, cochée dès que MySQL est trouvé ou installé (cf. phase 1) |
 | 1 | **Variable d'environnement MySQL OK** | le dossier de `mysql` est dans le `PATH` (ajouté sinon) |
-| 2 | **Dossier partagé existe et partagé** | le dossier d'échange existe et est partagé sur le réseau |
-| 3 | **Création / Contrôle utilisateur** | mode *Create* : utilisateur créé (« Création utilisateur → *login* créé ») ; mode *Verify* : connexion validée avec les identifiants saisis (« Contrôle utilisateur → *login* reconnu ») |
-| 4 | **secure_file_priv configuré** | `secure_file_priv` pointe sur le dossier partagé |
-| 5 | **Lecture / écriture mysql vérifiée** | le serveur écrit puis relit un fichier test dans le dossier partagé |
-| 6 | **Droits utilisateurs confirmés** | l'utilisateur possède `ALL PRIVILEGES` + `GRANT OPTION` |
+| 2 | **Dossier partagé existe et partagé** | le dossier d'échange existe et est partagé ; une fois cochée, la case **révèle le chemin** (ex. `Dossier partagé : C:\Users\Public`) |
+| 3 | **secure_file_priv configuré** | `secure_file_priv` pointe sur le dossier partagé |
+| 4 | **Lecture / écriture mysql vérifiée** | le serveur écrit puis relit un fichier test dans le dossier partagé |
+| 5 | **Droits utilisateurs confirmés** | l'utilisateur possède `ALL PRIVILEGES` + `GRANT OPTION` |
+
+> La **création** (mode *Create*) ou le **contrôle** (mode *Verify*) de l'utilisateur
+> n'a pas de case dédiée : la création se fait juste après l'étape 1, et une
+> connexion réussie aux étapes suivantes prouve la validité du couple login/mot de
+> passe.
 
 > En mode *Create*, l'utilisateur est créé avec `GRANT ALL PRIVILEGES ON *.* …
 > WITH GRANT OPTION`. Le mot de passe n'est jamais écrit sur disque (les requêtes
 > passent par `-e`, et les scripts privilégiés temporaires sont supprimés).
 
-> **Saisie** : le bouton de validation (*Vérifier* / *Créer l'utilisateur*) reste
+> **Saisie** : le bouton de validation (*Vérifier* / *Créer le compte*) reste
 > désactivé tant que le login (5–15) et le mot de passe (5–12) ne sont pas
-> alphanumériques au bon format ; un tooltip de rappel s'affiche au survol.
+> alphanumériques au bon format ; un **tooltip immédiat** de rappel des critères
+> s'affiche au survol du bouton désactivé. En mode *Create*, le bouton exige en
+> plus que la **confirmation soit identique au mot de passe** (champ encadré de
+> **rouge** tant qu'il est vide ou différent).
 > La connexion à MySQL se fait via les binaires `mysql`/`mysqladmin` (aucune
 > dépendance à `libmysqlclient` ni au pilote Qt `QMYSQL`).
 
-La barre de titre de la fenêtre est **« Paramétrage de MySQL pour l'exécution de
-Rufus »**. Le titre et le sous-titre internes s'adaptent au mode :
+La barre de titre de la fenêtre est **« MySQL Installer »**. Le titre et le
+sous-titre internes s'adaptent au mode (les boutons suivent la convention Rufus :
+bouton principal en bas à droite, *Annuler* à sa gauche) :
 
 | Mode | Titre (gras) | Sous-titre | Bouton |
 |------|--------------|------------|--------|
-| *Create* (installation neuve) | Installation de MySQL | Saisissez les identifiants de l'utilisateur que vous voulez créer | Créer l'utilisateur |
-| *Verify* (MySQL déjà présent) | Connexion à MySQL | Saisissez vos identifiants MySQL. | Vérifier |
+| *Create* (installation neuve) | Créer un compte MySQL | Ce compte sera utilisé pour accéder à MySQL. Seuls les lettres et chiffres sont autorisés. | Créer le compte |
+| *Verify* (MySQL déjà présent) | Connexion à MySQL | Saisissez vos identifiants MySQL. Seuls les lettres et chiffres sont autorisés. | Vérifier |
 
 L'interface est traduite en **français** (source), **anglais**, **espagnol** et
 **portugais** (sélecteur de langue en haut de la fenêtre).
@@ -65,15 +78,20 @@ Tout le code spécifique est isolé par compilation conditionnelle
 |---|---|---|---|
 | Pré-requis | macOS ≥ 13 (Ventura ; imposé par Qt 6.10) | **Visual C++ Redistributable 2022** (installé au besoin) | version Ubuntu vérifiée |
 | Droits admin | groupe `admin` (+ `osascript` pour l'élévation) | processus **élevé** (manifeste UAC) | groupe `sudo`/root (+ **`pkexec`**) |
-| Installation MySQL | DMG Oracle + `installer` | MSI + `msiexec /quiet` | **`apt-get install mysql-server`** |
+| Installation MySQL | DMG Oracle + `installer` | **archive ZIP** + `mysqld --initialize-insecure` + `--install` (service) | **`apt-get install mysql-server`** |
 | Service | `launchctl` / `brew services` | `net start/stop MySQL` | `systemctl … mysql` |
 | Dossier partagé | `/Users/Shared` (partage SMB) | `C:\Users\Public` (déjà partagé) | `/Users/Shared` (créé, AppArmor, `ufw allow 3306`, Samba) |
-| Fichier de conf | `/etc/my.cnf` | `…\MySQL Server 8.4\my.ini` | `…/mysql.conf.d/mysqld.cnf` |
+| Fichier de conf | `/etc/my.cnf` | `C:\ProgramData\MySQL\MySQL Server 8.4\my.ini` | `…/mysql.conf.d/mysqld.cnf` |
 | `PATH` | `/etc/paths.d/mysql` | `PATH` *Machine* (registre) | `/etc/profile.d/mysql.sh` |
+| Désinstallation | — | **entrée « Applications et fonctionnalités »** (registre `Uninstall` + script auto-élevant, taille affichée) | — |
 
-> ℹ️ Seule la cible **macOS** est actuellement compilée et testée. Les branches
-> Windows et Linux sont écrites mais doivent être bâties/validées sur ces
-> systèmes (voir « Points à valider » plus bas).
+> ℹ️ Les cibles **macOS** et **Windows 10/11** sont compilées et testées (le mode
+> *Create* a été validé de bout en bout sous Windows 11, voir
+> [`BUILD_WINDOWS.md`](BUILD_WINDOWS.md)). La branche **Linux** est écrite mais
+> reste à bâtir/valider (voir « Points à valider » plus bas).
+>
+> ⚠️ **Distribution Windows** : l'exécutable doit être **signé** (Authenticode)
+> pour éviter les blocages SmartScreen / Smart App Control sur les postes.
 
 ---
 
@@ -126,6 +144,8 @@ mysql_installer/
 ├── MySQLInstaller.pro          ← projet Qt (blocs macx / win32)
 ├── build.sh                    ← build macOS simple → build/
 ├── package.sh                  ← build macOS 2 archis + DMG → dist/
+├── build_windows.ps1           ← build Windows (qmake → make → windeployqt)
+├── BUILD_WINDOWS.md            ← guide build & test Windows
 ├── src/
 │   ├── main.cpp                ← point d'entrée, garde de version OS
 │   ├── appcontroller.{h,cpp}   ← toute la logique (2 phases, multi-plateforme)
@@ -138,6 +158,8 @@ mysql_installer/
 │   ├── resources.qrc           ← icône + chevron du sélecteur de langue
 │   ├── chevron-down.svg
 │   ├── mysql.png / app.icns / Info.plist
+│   ├── app.manifest            ← manifeste UAC Windows (requireAdministrator)
+│   └── win_manifest.rc         ← embarque le manifeste dans l'exe
 └── translations/
     └── mysql_installer_{fr,en,es,pt}.ts
 ```
@@ -150,25 +172,29 @@ mysql_installer/
   `src/appcontroller.cpp`. Chaque étape correspond à une méthode
   (`ensureMysqlInPath`, `setupSharedFolder`, `ensureSecureFilePriv`,
   `testSharedFolderRW`, `checkPrivileges`…).
-- **Libellés des cases** : tableau `stepLabels[]` dans
-  `credentialsdialog.cpp`. Les cases « Dossier partagé » et « Création / Contrôle
-  utilisateur » ont un libellé dynamique révélé une fois cochées (chemin, ou
-  `userStepBase()` / `userStepLabel()` pour le login). Penser à
+- **Libellés des cases** : méthode `CredentialsDialog::baseStepLabel()` dans
+  `credentialsdialog.cpp`. Un libellé peut être **révélé** une fois la case cochée
+  via `setStepDetail()` (ex. le chemin du dossier partagé). Penser à
   `lupdate`/`lrelease` après toute modification de texte.
 - **Dossier partagé** : helper `AppController::sharedFolderPath()`.
+- **Téléchargements** : `AppController::downloadFile()` (QNetwork + repli `curl`,
+  HTTP/1.1 forcé) ; extraction Windows avec barre de % via `runLongOpProgress()`.
 
 ---
 
-## Points à valider (Windows / Linux)
+## Points à valider (Linux / divers)
 
-- **Version MySQL** : le programme exige `8.4.3`. Sous Ubuntu, `apt` fournit
-  MySQL **8.0.x** par défaut — il faut ajouter le dépôt APT MySQL 8.4 ou
-  assouplir le test de version.
-- **Windows** : l'installation via MSI peut nécessiter l'initialisation du
-  datadir et l'enregistrement du service (`mysqld --initialize` / `--install`).
-- **Nom du service** (`MySQL`) et **emplacement du fichier de conf** supposés par
-  défaut, à confirmer selon le paquet.
-- Dépendances runtime Linux : `pkexec`, `ufw`, `apparmor_parser`, `samba`.
+- **Linux — version MySQL** : `apt` fournit MySQL **8.0.x** par défaut sous Ubuntu.
+  Le programme accepte ≥ 8.4.3 ; pour installer 8.4.9 il faut **ajouter le dépôt
+  APT MySQL 8.4** (l'`apt-get install mysql-server` actuel ne suffit pas).
+- **Linux** : build et déroulé complet **encore à valider** ; dépendances runtime
+  `pkexec`, `ufw`, `apparmor_parser`, `samba`.
+- **macOS** : le nom exact du DMG 8.4.9 (`mysql-8.4.9-macos14|15-*.dmg`) est à
+  confirmer au moment du test (cf. `downloadOracleDmg()`).
+- **Traductions** : penser à `lupdate`/`lrelease` — les chaînes en/es/pt ajoutées
+  récemment restent à compléter.
+- **Windows — signature** : signer l'exécutable (Authenticode) pour la
+  distribution (SmartScreen / Smart App Control).
 
 ---
 
