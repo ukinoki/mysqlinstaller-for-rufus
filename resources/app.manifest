@@ -16,8 +16,21 @@
     </security>
   </trustInfo>
 
-  <!-- Compatibilité Windows 10 / 11 (évite la virtualisation héritée et active
-       le DPI/au comportement moderne). -->
+  <!-- Style visuel moderne : on declare nous-meme la dependance Common-Controls
+       v6 (sinon ajoutee par Qt via embed_manifest_exe, que l'on desactive pour
+       eviter un manifeste en double). -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32"
+                        name="Microsoft.Windows.Common-Controls"
+                        version="6.0.0.0"
+                        processorArchitecture="*"
+                        publicKeyToken="6595b64144ccf1df"
+                        language="*"/>
+    </dependentAssembly>
+  </dependency>
+
+  <!-- Compatibilité Windows 10 / 11. -->
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
       <!-- Windows 10 et 11 -->

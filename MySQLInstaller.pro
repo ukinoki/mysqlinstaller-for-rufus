@@ -48,7 +48,9 @@ win32 {
     # ET MinGW. Voir resources/win_manifest.rc et resources/app.manifest.
     RC_FILE = resources/win_manifest.rc
 
-    # MSVC génère son propre manifeste par défaut : on le désactive pour éviter
-    # un conflit (LNK4078) avec celui embarqué par le .rc.
-    win32-msvc: QMAKE_LFLAGS += /MANIFEST:NO
+    # MSVC embarque son propre manifeste par défaut (CONFIG embed_manifest_exe).
+    # On le désactive pour éviter un doublon (CVT1100 « ressource en double » →
+    # LNK1123) avec celui de notre .rc. La dépendance « Common-Controls » que Qt
+    # ajoutait est désormais déclarée directement dans resources/app.manifest.
+    win32-msvc: CONFIG -= embed_manifest_exe
 }
