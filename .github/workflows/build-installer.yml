@@ -22,8 +22,9 @@ jobs:
         uses: actions/checkout@v5
 
       # ── 2. Installer Qt 6 (MSVC 64-bit) ───────────────────────────────────
-      #  Network fait partie de qtbase (install de base) → pas un module à part.
-      #  Seul Svg est un module add-on à demander explicitement.
+      #  Network ET Svg sont des modules essentiels inclus dans l'install de base
+      #  de Qt (qtbase) — ce ne sont PAS des modules add-on à demander via
+      #  --modules (aqtinstall échoue sinon : « packages not found »).
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -31,7 +32,6 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
-          modules: 'qtsvg'
           cache: true
 
       # ── 3. Activer l'environnement MSVC (nmake, cl.exe) ───────────────────
