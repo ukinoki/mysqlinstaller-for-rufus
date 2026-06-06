@@ -767,37 +767,48 @@ bool AppController::installMySQL()
     // 2. Extraction entrée par entrée (avec barre de progression) puis
     //    déplacement vers le dossier d'installation final. On passe par un
     //    script .ps1 temporaire (évite les soucis de guillemets) qui émet des
-    //    lignes « PROGRESS fait total » lues par runLongOpProgress().
-    const QString extractPs = QDir::tempPath() + "/mysql_extract.ps1";
+    //    lignes « PROGRESS fait total » lues par runLongOpProgress(). Toute
+    //    erreur est journalisée pour diagnostic.
+    const QString extractPs  = QDir::tempPath() + "/mysql_extract.ps1";
+    const QString extractLog = QDir::tempPath() + "/mysql_extract.log";
+    QFile::remove(extractLog);
     {
         QFile f(extractPs);
         if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream ts(&f);
             ts << "$ErrorActionPreference = 'Stop'\r\n"
-               << "Add-Type -AssemblyName System.IO.Compression.FileSystem\r\n"
-               << "$zipPath = '" << QDir::toNativeSeparators(zipPath) << "'\r\n"
-               << "$dest    = '" << QDir::toNativeSeparators(extract) << "'\r\n"
-               << "$base    = '" << QDir::toNativeSeparators(base)    << "'\r\n"
-               << "if (Test-Path $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }\r\n"
-               << "$zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)\r\n"
-               << "$total = $zip.Entries.Count\r\n"
-               << "$i = 0\r\n"
-               << "foreach ($e in $zip.Entries) {\r\n"
+               << "$log = '" << QDir::toNativeSeparators(extractLog) << "'\r\n"
+               << "try {\r\n"
+               << "  Add-Type -AssemblyName System.IO.Compression.FileSystem\r\n"
+               << "  $zipPath = '" << QDir::toNativeSeparators(zipPath) << "'\r\n"
+               << "  $dest    = '" << QDir::toNativeSeparators(extract) << "'\r\n"
+               << "  $base    = '" << QDir::toNativeSeparators(base)    << "'\r\n"
+               << "  if (Test-Path $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }\r\n"
+               << "  $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)\r\n"
+               << "  $total = $zip.Entries.Count\r\n"
+               << "  $i = 0\r\n"
+               << "  foreach ($e in $zip.Entries) {\r\n"
                << "    $i++\r\n"
                << "    $target = Join-Path $dest $e.FullName\r\n"
                << "    if ($e.FullName.EndsWith('/')) {\r\n"
-               << "        New-Item -ItemType Directory -Force -Path $target | Out-Null\r\n"
+               << "      if (-not (Test-Path $target)) { New-Item -ItemType Directory -Force -Path $target | Out-Null }\r\n"
                << "    } else {\r\n"
-               << "        $dir = Split-Path $target -Parent\r\n"
-               << "        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }\r\n"
-               << "        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $target, $true)\r\n"
+               << "      $dir = Split-Path $target -Parent\r\n"
+               << "      if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }\r\n"
+               << "      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $target, $true)\r\n"
                << "    }\r\n"
                << "    if (($i % 100) -eq 0 -or $i -eq $total) { Write-Output (\"PROGRESS {0} {1}\" -f $i, $total) }\r\n"
-               << "}\r\n"
-               << "$zip.Dispose()\r\n"
-               << "New-Item -ItemType Directory -Force -Path (Split-Path $base -Parent) | Out-Null\r\n"
-               << "if (Test-Path $base) { Remove-Item -LiteralPath $base -Recurse -Force }\r\n"
-               << "Move-Item -LiteralPath (Join-Path $dest '" << innerDir << "') -Destination $base -Force\r\n";
+               << "  }\r\n"
+               << "  $zip.Dispose()\r\n"
+               << "  New-Item -ItemType Directory -Force -Path (Split-Path $base -Parent) | Out-Null\r\n"
+               << "  if (Test-Path $base) { Remove-Item -LiteralPath $base -Recurse -Force }\r\n"
+               << "  Move-Item -LiteralPath (Join-Path $dest '" << innerDir << "') -Destination $base -Force\r\n"
+               << "  if (-not (Test-Path (Join-Path $base 'bin\\mysqld.exe'))) {\r\n"
+               << "    ('mysqld.exe absent. Contenu extrait : ' + ((Get-ChildItem -LiteralPath $dest -Name) -join ', ')) | Out-File -FilePath $log -Encoding utf8 -Force\r\n"
+               << "  }\r\n"
+               << "} catch {\r\n"
+               << "  \"$($_.Exception.Message)\" | Out-File -FilePath $log -Encoding utf8 -Force\r\n"
+               << "}\r\n";
             f.close();
         }
     }
@@ -808,10 +819,17 @@ bool AppController::installMySQL()
     QFile::remove(extractPs);
     QFile::remove(zipPath);
     if (!QFile::exists(mysqld)) {
+        QString detail;
+        QFile lf(extractLog);
+        if (lf.open(QIODevice::ReadOnly | QIODevice::Text))
+            detail = QString::fromUtf8(lf.readAll()).trimmed().left(1500);
+        QFile::remove(extractLog);
         QMessageBox::critical(nullptr, tr("Extraction échouée"),
-            tr("L'archive MySQL n'a pas pu être extraite (mysqld.exe introuvable)."));
+            tr("L'archive MySQL n'a pas pu être extraite (mysqld.exe introuvable).\n\n"
+               "Détail : %1").arg(detail.isEmpty() ? tr("(aucun détail)") : detail));
         return false;
     }
+    QFile::remove(extractLog);
 
     // 3. Fichier de configuration minimal (basedir + datadir).
     QDir().mkpath(progData);
