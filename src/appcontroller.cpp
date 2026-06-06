@@ -70,6 +70,22 @@ static inline void startShellProcess(QProcess& p, const QString& cmd)
 #endif
 }
 
+//  Compare deux numéros de version « pointés » (ex. « 8.4.8 » vs « 8.4.3 »).
+//  Renvoie true si « ver » est supérieur OU égal à « minVer », composant par
+//  composant. Une version vide/inconnue est considérée comme inférieure.
+static bool versionAtLeast(const QString& ver, const QString& minVer)
+{
+    const QStringList a = ver.split('.', Qt::SkipEmptyParts);
+    const QStringList b = minVer.split('.', Qt::SkipEmptyParts);
+    const int n = qMax(a.size(), b.size());
+    for (int i = 0; i < n; ++i) {
+        const int va = (i < a.size()) ? a.at(i).toInt() : 0;
+        const int vb = (i < b.size()) ? b.at(i).toInt() : 0;
+        if (va != vb) return va > vb;
+    }
+    return true;   // égalité exacte => au moins la version minimale
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 AppController::AppController(QObject* parent)
     : QObject(parent)
@@ -236,9 +252,13 @@ void AppController::run()
 
     if (installed) {
         QString ver = getMySQLVersion();
-        if (ver == "8.4.3") {
+        if (versionAtLeast(ver, "8.4.3")) {
+            // Version installée >= 8.4.3 : on l'accepte telle quelle (jamais de
+            // downgrade). Le serveur sera démarré/vérifié à l'étape de
+            // vérification ; on poursuit en mode Verify.
             mysqlOk = true;
         } else {
+            // Version antérieure à 8.4.3 (ou inconnue) : proposer la mise à jour.
             auto btn = QMessageBox::question(nullptr,
                 tr("Mise à jour MySQL"),
                 tr("MySQL %1 est installé.\n"
@@ -288,9 +308,10 @@ void AppController::onCredentialsAccepted()
     m_dialog->uncheckAllSteps();
     m_dialog->clearError();
 
-    // ── Étape 1 : MySQL 8.4.3 présent ─────────────────────────────────────
-    if (!isMySQLInstalled() || getMySQLVersion() != "8.4.3") {
-        m_dialog->setError(tr("MySQL 8.4.3 n'est pas détecté sur ce système."));
+    // ── Étape 1 : MySQL 8.4.3 ou ultérieur présent ────────────────────────
+    if (!isMySQLInstalled() || !versionAtLeast(getMySQLVersion(), "8.4.3")) {
+        m_dialog->setError(
+            tr("MySQL 8.4.3 (ou ultérieur) n'est pas détecté sur ce système."));
         m_dialog->setInputsEnabled(true);
         return;
     }
