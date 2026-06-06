@@ -77,6 +77,9 @@ private:
     bool    runCmdElevated(const QString& cmd);   // exécution avec droits admin
     void    runLongOp(const QString& cmd, const QString& label,
                       int timeoutMs = 360000);
+    //  Comme runLongOp mais avec barre de % : la commande émet « PROGRESS f t ».
+    void    runLongOpProgress(const QString& cmd, const QString& label,
+                              int timeoutMs = 360000);
     QString getBrewPrefix();
     QString mysqlBin(const QString& binary);
     bool    isOracleInstall();

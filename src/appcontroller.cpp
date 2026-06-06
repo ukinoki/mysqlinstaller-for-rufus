@@ -756,15 +756,48 @@ bool AppController::installMySQL()
         return false;
     }
 
-    // 2. Extraction puis déplacement vers le dossier d'installation final.
-    runLongOp(QString("powershell -NoProfile -Command \""
-        "Expand-Archive -LiteralPath '%1' -DestinationPath '%2' -Force; "
-        "New-Item -ItemType Directory -Force -Path 'C:\\Program Files\\MySQL' "
-        "| Out-Null; "
-        "Move-Item -LiteralPath '%2\\%3' -Destination '%4' -Force\"")
-        .arg(QDir::toNativeSeparators(zipPath), QDir::toNativeSeparators(extract),
-             innerDir, QDir::toNativeSeparators(base)),
-        tr("Extraction de MySQL…"), 600000);
+    // 2. Extraction entrée par entrée (avec barre de progression) puis
+    //    déplacement vers le dossier d'installation final. On passe par un
+    //    script .ps1 temporaire (évite les soucis de guillemets) qui émet des
+    //    lignes « PROGRESS fait total » lues par runLongOpProgress().
+    const QString extractPs = QDir::tempPath() + "/mysql_extract.ps1";
+    {
+        QFile f(extractPs);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream ts(&f);
+            ts << "$ErrorActionPreference = 'Stop'\r\n"
+               << "Add-Type -AssemblyName System.IO.Compression.FileSystem\r\n"
+               << "$zipPath = '" << QDir::toNativeSeparators(zipPath) << "'\r\n"
+               << "$dest    = '" << QDir::toNativeSeparators(extract) << "'\r\n"
+               << "$base    = '" << QDir::toNativeSeparators(base)    << "'\r\n"
+               << "if (Test-Path $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }\r\n"
+               << "$zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)\r\n"
+               << "$total = $zip.Entries.Count\r\n"
+               << "$i = 0\r\n"
+               << "foreach ($e in $zip.Entries) {\r\n"
+               << "    $i++\r\n"
+               << "    $target = Join-Path $dest $e.FullName\r\n"
+               << "    if ($e.FullName.EndsWith('/')) {\r\n"
+               << "        New-Item -ItemType Directory -Force -Path $target | Out-Null\r\n"
+               << "    } else {\r\n"
+               << "        $dir = Split-Path $target -Parent\r\n"
+               << "        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }\r\n"
+               << "        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $target, $true)\r\n"
+               << "    }\r\n"
+               << "    if (($i % 100) -eq 0 -or $i -eq $total) { Write-Output (\"PROGRESS {0} {1}\" -f $i, $total) }\r\n"
+               << "}\r\n"
+               << "$zip.Dispose()\r\n"
+               << "New-Item -ItemType Directory -Force -Path (Split-Path $base -Parent) | Out-Null\r\n"
+               << "if (Test-Path $base) { Remove-Item -LiteralPath $base -Recurse -Force }\r\n"
+               << "Move-Item -LiteralPath (Join-Path $dest '" << innerDir << "') -Destination $base -Force\r\n";
+            f.close();
+        }
+    }
+    runLongOpProgress(
+        QString("powershell -NoProfile -ExecutionPolicy Bypass -File \"%1\"")
+            .arg(QDir::toNativeSeparators(extractPs)),
+        tr("Extraction des fichiers MySQL…"), 600000);
+    QFile::remove(extractPs);
     QFile::remove(zipPath);
     if (!QFile::exists(mysqld)) {
         QMessageBox::critical(nullptr, tr("Extraction échouée"),
@@ -1401,6 +1434,40 @@ void AppController::runLongOp(const QString& cmd, const QString& label, int time
 
     dlg->close();
     delete dlg;
+}
+
+//  Variante de runLongOp() avec barre de progression réelle : la commande doit
+//  émettre sur sa sortie standard des lignes « PROGRESS <fait> <total> », qui
+//  pilotent le pourcentage.
+void AppController::runLongOpProgress(const QString& cmd, const QString& label,
+                                      int timeoutMs)
+{
+    ProgressDialog dlg(label);
+    dlg.show();
+    QApplication::processEvents();
+
+    QProcess proc;
+    proc.setProcessChannelMode(QProcess::MergedChannels);
+    QObject::connect(&proc, &QProcess::readyReadStandardOutput, [&]{
+        while (proc.canReadLine()) {
+            const QString line = QString::fromLocal8Bit(proc.readLine()).trimmed();
+            if (line.startsWith("PROGRESS")) {
+                const QStringList p = line.split(' ', Qt::SkipEmptyParts);
+                if (p.size() >= 3)
+                    dlg.setProgress(p.at(1).toLongLong(), p.at(2).toLongLong());
+            }
+        }
+        QApplication::processEvents();
+    });
+
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&proc,    &QProcess::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout,    [&]{ proc.kill(); loop.quit(); });
+    startShellProcess(proc, cmd);
+    if (timeoutMs > 0) timeout.start(timeoutMs);
+    loop.exec();
 }
 
 //  Téléchargement HTTP(S) robuste :
