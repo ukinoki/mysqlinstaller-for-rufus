@@ -180,6 +180,21 @@ QString CredentialsDialog::login()    const { return m_login->text(); }
 QString CredentialsDialog::password() const { return m_password->text(); }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Bascule de mode (fenêtre déjà visible) : affiche/masque la confirmation et
+//  réactualise titre, sous-titre et libellé du bouton via retranslateUi().
+// ─────────────────────────────────────────────────────────────────────────────
+void CredentialsDialog::setMode(Mode mode)
+{
+    if (m_mode == mode) return;
+    m_mode = mode;
+    const bool create = (mode == Mode::Create);
+    m_confirmLabel->setVisible(create);
+    m_confirm->setVisible(create);
+    retranslateUi();
+    adjustSize();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Changement de langue
 // ─────────────────────────────────────────────────────────────────────────────
 void CredentialsDialog::changeLanguage(int comboIndex)
@@ -242,7 +257,7 @@ void CredentialsDialog::retranslateUi()
     m_stepsGroup->setTitle(tr("État de l'installation"));
 
     const QString stepLabels[6] = {
-        tr("MySQL 8.4.3 installé"),
+        tr("MySQL 8.4.9 installé"),
         tr("Variable d'environnement MySQL OK"),
         tr("Dossier partagé existe et partagé"),
         tr("secure_file_priv configuré"),

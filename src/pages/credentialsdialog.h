@@ -25,6 +25,7 @@ public:
     void setError(const QString& msg);
     void clearError();
     void setInputsEnabled(bool enabled);
+    void setMode(Mode mode);        // bascule Verify <-> Create fenêtre visible
 
 signals:
     void credentialsAccepted();

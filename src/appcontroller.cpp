@@ -250,55 +250,67 @@ void AppController::run()
     }
 #endif
 
-    bool installed = isMySQLInstalled();
-    bool mysqlOk   = false;
-
-    if (installed) {
-        QString ver = getMySQLVersion();
-        if (versionAtLeast(ver, "8.4.3")) {
-            // Version installée >= 8.4.3 : on l'accepte telle quelle (jamais de
-            // downgrade). Le serveur sera démarré/vérifié à l'étape de
-            // vérification ; on poursuit en mode Verify.
-            mysqlOk = true;
-        } else {
-            // Version antérieure à 8.4.3 (ou inconnue) : proposer la mise à jour.
-            auto btn = QMessageBox::question(nullptr,
-                tr("Mise à jour MySQL"),
-                tr("MySQL %1 est installé.\n"
-                   "Voulez-vous le mettre à jour vers la version 8.4.3 ?")
-                    .arg(ver.isEmpty() ? tr("(version inconnue)") : ver),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
-
-            if (btn == QMessageBox::No) { qApp->quit(); return; }
-            mysqlOk = upgradeMySQL();
-        }
-    } else {
-        mysqlOk = installMySQL();
-    }
-
-    if (!mysqlOk) {
-        QMessageBox::critical(nullptr,
-            tr("Erreur d'installation"),
-            tr("L'installation ou la mise à jour de MySQL 8.4.3 a échoué.\n"
-               "Vérifiez votre connexion Internet et relancez le programme."));
-        qApp->quit();
-        return;
-    }
-
-    m_freshInstall = !installed;
-
-    // Démarrer MySQL après une nouvelle installation
-    if (m_freshInstall) startMySQL();
-
-    // Afficher le dialogue de saisie + indicateurs
-    auto mode = m_freshInstall ? CredentialsDialog::Mode::Create
-                               : CredentialsDialog::Mode::Verify;
-    m_dialog = new CredentialsDialog(mode);
+    // ── Fenêtre affichée AVANT le contrôle de MySQL ───────────────────────────
+    //  La fiche s'ouvre immédiatement en mode Verify, case « MySQL » décochée et
+    //  saisie verrouillée. La détection (puis l'éventuelle installation) se fait
+    //  fenêtre déjà visible ; la case se coche et la saisie se déverrouille une
+    //  fois MySQL prêt.
+    m_dialog = new CredentialsDialog(CredentialsDialog::Mode::Verify);
     connect(m_dialog, &CredentialsDialog::credentialsAccepted,
             this,     &AppController::onCredentialsAccepted);
     connect(m_dialog, &QDialog::rejected,
             qApp,     &QApplication::quit);
+    m_dialog->setInputsEnabled(false);     // verrouillé tant que MySQL non confirmé
     m_dialog->show();
+    QApplication::processEvents();         // forcer l'affichage avant les contrôles
+
+    const bool installed = isMySQLInstalled();
+
+    if (installed) {
+        const QString ver = getMySQLVersion();
+        if (!versionAtLeast(ver, "8.4.3")) {
+            // Version antérieure à 8.4.3 (ou inconnue) : proposer la mise à jour.
+            auto btn = QMessageBox::question(m_dialog,
+                tr("Mise à jour MySQL"),
+                tr("MySQL %1 est installé.\n"
+                   "Voulez-vous le mettre à jour vers la version 8.4.9 ?")
+                    .arg(ver.isEmpty() ? tr("(version inconnue)") : ver),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+            if (btn == QMessageBox::No) { qApp->quit(); return; }
+            if (!upgradeMySQL()) {
+                QMessageBox::critical(m_dialog, tr("Erreur d'installation"),
+                    tr("La mise à jour de MySQL a échoué.\n"
+                       "Vérifiez votre connexion Internet et relancez le programme."));
+                qApp->quit();
+                return;
+            }
+        }
+        m_freshInstall = false;            // mode Verify
+        if (!isServerRunning()) startMySQL();
+    } else {
+        // ── MySQL absent : demander la permission d'installer ─────────────────
+        auto btn = QMessageBox::question(m_dialog,
+            tr("Installation de MySQL"),
+            tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
+               "Voulez-vous l'installer maintenant (version 8.4.9) ?"),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+        if (btn == QMessageBox::No) { qApp->quit(); return; }
+
+        // Bascule en mode Create avant l'installation (titre et bouton adaptés).
+        m_dialog->setMode(CredentialsDialog::Mode::Create);
+
+        if (!installMySQL()) {
+            // installMySQL() affiche déjà un message détaillé en cas d'échec.
+            qApp->quit();
+            return;
+        }
+        m_freshInstall = true;
+        startMySQL();
+    }
+
+    // MySQL prêt : cocher la case « MySQL » et déverrouiller la saisie.
+    m_dialog->checkStep(0);
+    m_dialog->setInputsEnabled(true);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
