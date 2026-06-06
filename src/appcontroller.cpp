@@ -423,6 +423,9 @@ void AppController::onCredentialsAccepted()
         m_dialog->setInputsEnabled(true);
         return;
     }
+    // Révèle le chemin du dossier partagé en face de la case (une fois cochée).
+    m_dialog->setStepDetail(2, tr("Dossier partagé : %1")
+                            .arg(QDir::toNativeSeparators(sharedFolderPath())));
     m_dialog->checkStep(2);
 
     // ── Étape 4 : secure_file_priv pointe sur le dossier partagé ──────────

@@ -26,6 +26,7 @@ public:
     void clearError();
     void setInputsEnabled(bool enabled);
     void setMode(Mode mode);        // bascule Verify <-> Create fenêtre visible
+    void setStepDetail(int index, const QString& detail);  // libellé révélé (ex. chemin)
 
 signals:
     void credentialsAccepted();
@@ -57,13 +58,18 @@ private:
     QWidget*     m_okWrap = nullptr;     // conteneur du bouton (survol si désactivé)
     QPushButton* m_cancelBtn;
     UpCheckBox*  m_steps[6];
+    QString      m_stepDetail[6];       // libellé révélé par étape (ex. chemin)
 
     // ── Traduction dynamique ───────────────────────────────────────────────
     static QTranslator* s_translator;   // partagé entre instances
 
     bool validateInputs();
     void retranslateUi();
+    void onInputsChanged();             // réagit à chaque frappe (bouton + confirm)
     void updateOkState();               // (dé)active le bouton selon la validité
-    bool inputsValid() const;           // login 5-15 + mot de passe 5-12 (alphanum.)
+    void updateConfirmStyle();          // cadre rouge si confirmation vide/différente
+    bool inputsValid() const;           // login/mdp (+ confirm == mdp en mode Create)
     QString inputCriteria() const;      // texte du tooltip de rappel des critères
+    QString baseStepLabel(int index) const;
+    void applyStepLabel(int index);     // libellé de base ou révélé selon l'état
 };

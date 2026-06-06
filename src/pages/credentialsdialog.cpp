@@ -178,10 +178,10 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
     connect(m_okBtn,     &QPushButton::clicked, this, &CredentialsDialog::onConfirmClicked);
     connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 
-    // Validité en temps réel : (dé)active le bouton à chaque frappe.
-    connect(m_login,    &QLineEdit::textChanged, this, [this]{ updateOkState(); });
-    connect(m_password, &QLineEdit::textChanged, this, [this]{ updateOkState(); });
-    connect(m_confirm,  &QLineEdit::textChanged, this, [this]{ updateOkState(); });
+    // Validité en temps réel : (dé)active le bouton + cadre de la confirmation.
+    connect(m_login,    &QLineEdit::textChanged, this, [this]{ onInputsChanged(); });
+    connect(m_password, &QLineEdit::textChanged, this, [this]{ onInputsChanged(); });
+    connect(m_confirm,  &QLineEdit::textChanged, this, [this]{ onInputsChanged(); });
 
     // Connexion du sélecteur de langue
     connect(langCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -189,7 +189,7 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
 
     // Premier rendu avec la langue courante
     retranslateUi();
-    updateOkState();      // bouton désactivé tant que les champs sont incomplets
+    onInputsChanged();    // état initial du bouton et du cadre de confirmation
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -210,6 +210,7 @@ void CredentialsDialog::setMode(Mode mode)
     m_confirmLabel->setVisible(create);
     m_confirm->setVisible(create);
     retranslateUi();
+    onInputsChanged();    // critères/cadre dépendent du mode
     adjustSize();
 }
 
@@ -275,16 +276,8 @@ void CredentialsDialog::retranslateUi()
 
     m_stepsGroup->setTitle(tr("État de l'installation"));
 
-    const QString stepLabels[6] = {
-        tr("MySQL 8.4.9 installé"),
-        tr("Variable d'environnement MySQL OK"),
-        tr("Dossier partagé existe et partagé"),
-        tr("secure_file_priv configuré"),
-        tr("Lecture / écriture mysql vérifiée"),
-        tr("Droits utilisateurs confirmés")
-    };
     for (int i = 0; i < 6; i++)
-        m_steps[i]->setText(stepLabels[i]);
+        applyStepLabel(i);
 
     m_okBtn->setText(m_mode == Mode::Create
         ? tr("Créer le compte")
@@ -326,6 +319,7 @@ void CredentialsDialog::checkStep(int index)
 {
     if (index < 0 || index > 5) return;
     m_steps[index]->setChecked(true);
+    applyStepLabel(index);              // révèle le détail (ex. chemin) si défini
     QApplication::processEvents();
     QEventLoop loop;
     QTimer::singleShot(500, &loop, &QEventLoop::quit);
@@ -334,8 +328,42 @@ void CredentialsDialog::checkStep(int index)
 
 void CredentialsDialog::uncheckAllSteps()
 {
-    for (int i = 0; i < 6; i++) m_steps[i]->setChecked(false);
+    for (int i = 0; i < 6; i++) {
+        m_steps[i]->setChecked(false);
+        applyStepLabel(i);
+    }
     QApplication::processEvents();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Libellés d'étapes (libellé de base, ou détail révélé une fois la case cochée)
+// ─────────────────────────────────────────────────────────────────────────────
+QString CredentialsDialog::baseStepLabel(int index) const
+{
+    switch (index) {
+    case 0: return tr("MySQL 8.4.9 installé");
+    case 1: return tr("Variable d'environnement MySQL OK");
+    case 2: return tr("Dossier partagé existe et partagé");
+    case 3: return tr("secure_file_priv configuré");
+    case 4: return tr("Lecture / écriture mysql vérifiée");
+    case 5: return tr("Droits utilisateurs confirmés");
+    }
+    return {};
+}
+
+void CredentialsDialog::applyStepLabel(int index)
+{
+    if (index < 0 || index > 5) return;
+    const bool revealed = m_steps[index]->isChecked()
+                          && !m_stepDetail[index].isEmpty();
+    m_steps[index]->setText(revealed ? m_stepDetail[index] : baseStepLabel(index));
+}
+
+void CredentialsDialog::setStepDetail(int index, const QString& detail)
+{
+    if (index < 0 || index > 5) return;
+    m_stepDetail[index] = detail;
+    applyStepLabel(index);
 }
 
 void CredentialsDialog::setError(const QString& msg)
@@ -369,19 +397,45 @@ bool CredentialsDialog::inputsValid() const
 {
     // Le validator garantit déjà l'alphanumérique et la longueur maximale
     // (15 / 12) ; il reste à vérifier la longueur minimale (5).
-    return m_login->text().length()    >= 5
-        && m_password->text().length() >= 5;
+    if (m_login->text().length()    < 5) return false;
+    if (m_password->text().length() < 5) return false;
+    // En mode Create, la confirmation doit être identique au mot de passe.
+    if (m_mode == Mode::Create && m_confirm->text() != m_password->text())
+        return false;
+    return true;
 }
 
 QString CredentialsDialog::inputCriteria() const
 {
-    return tr("Login : 5 à 15 caractères alphanumériques.\n"
-              "Mot de passe : 5 à 12 caractères alphanumériques.");
+    QString s = tr("Login : 5 à 15 caractères alphanumériques.\n"
+                   "Mot de passe : 5 à 12 caractères alphanumériques.");
+    if (m_mode == Mode::Create)
+        s += tr("\nLa confirmation doit être identique au mot de passe.");
+    return s;
 }
 
 void CredentialsDialog::updateOkState()
 {
     m_okBtn->setEnabled(inputsValid());
+}
+
+//  Cadre rouge autour de la confirmation tant qu'elle est vide ou différente du
+//  mot de passe (mode Create uniquement).
+void CredentialsDialog::updateConfirmStyle()
+{
+    const bool bad = (m_mode == Mode::Create)
+                     && (m_confirm->text().isEmpty()
+                         || m_confirm->text() != m_password->text());
+    m_confirm->setStyleSheet(bad
+        ? "QLineEdit { border: 1px solid #E24B4A; border-radius: 4px;"
+          " padding: 2px 4px; }"
+        : QString());
+}
+
+void CredentialsDialog::onInputsChanged()
+{
+    updateOkState();
+    updateConfirmStyle();
 }
 
 //  Affiche le tooltip de critères quand on survole le bouton désactivé (le
