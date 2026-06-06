@@ -128,11 +128,22 @@ bool AppController::isUbuntuVersionSupported()
 bool AppController::isVCRedist2022Installed()
 {
     // Clé posée par le runtime VC++ 14.x (2015-2022, binairement compatibles).
-    const QString out = runCmd(
-        "reg query "
-        "\"HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64\" "
-        "/v Installed 2>nul");
-    return out.contains("0x1");
+    // Deux subtilités corrigées ici :
+    //   1. On NE met PAS la clé entre guillemets : elle ne contient pas d'espace,
+    //      et les guillemets imbriqués passés via cmd.exe étaient mal transmis
+    //      (la requête échouait → VC++ cru absent → tentative d'install inutile).
+    //   2. La clé peut résider dans la vue 64 bits OU sous WOW6432Node selon
+    //      l'installeur : on teste les deux et on accepte « Installed=0x1 ».
+    const QStringList keys = {
+        "HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64",
+        "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64"
+    };
+    for (const QString& key : keys) {
+        const QString out = runCmd("reg query " + key + " /v Installed " + NUL());
+        if (out.contains("0x1"))
+            return true;
+    }
+    return false;
 }
 
 bool AppController::installVCRedist2022()
