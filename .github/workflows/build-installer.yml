@@ -107,7 +107,7 @@ jobs:
           name: "MySQL Installer for Rufus ${{ inputs.release_tag != '' && inputs.release_tag || github.ref_name }}"
           files: dist\MySQLInstallerForRufusSetup.exe
           body: |
-            ## MySQL Installer for Rufus ${{ github.ref_name }}
+            ## MySQL Installer for Rufus ${{ inputs.release_tag != '' && inputs.release_tag || github.ref_name }}
 
             **Installation** : téléchargez `MySQLInstallerForRufusSetup.exe`
             ci-dessous et exécutez-le. Windows demande les droits administrateur
