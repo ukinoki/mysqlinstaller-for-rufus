@@ -57,6 +57,10 @@ private:
     //  Télécharge url -> dest avec barre de progression (vrai pourcentage).
     bool    downloadFile(const QString& url, const QString& dest,
                          const QString& label);
+    //  Pré-requis réseau avant un téléchargement d'installation. Affiche un
+    //  message d'erreur explicite et renvoie false si : aucun accès réseau (WAN),
+    //  ou WAN présent mais le lien de téléchargement ne se résout pas (DNS).
+    bool    checkDownloadConnectivity(const QString& downloadUrl);
     void    stopMySQL();
     bool    startMySQL();
     bool    waitForMySQL(int maxSeconds = 30);

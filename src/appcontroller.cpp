@@ -22,6 +22,8 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
+#include <QHostInfo>
+#include <QTcpSocket>
 #include <QSettings>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -424,11 +426,30 @@ void AppController::run()
         if (!isServerRunning()) startMySQL();
     } else {
         // ── MySQL absent : demander la permission d'installer ─────────────────
-        const QString targetVer = fetchRemoteConfig().version;
+        const MySQLRemoteConfig cfg = fetchRemoteConfig();
         if (!askYesNo(tr("Installation de MySQL"),
                 tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
-                   "Voulez-vous l'installer maintenant (version %1) ?").arg(targetVer))) {
+                   "Voulez-vous l'installer maintenant (version %1) ?").arg(cfg.version))) {
             qApp->quit(); return;
+        }
+
+        // Pré-requis réseau AVANT le passage en mode Create : sans accès WAN ou
+        // si le lien de téléchargement ne se résout pas, l'installation est
+        // impossible. checkDownloadConnectivity() affiche le message adéquat.
+        QString dlUrl;
+#if defined(Q_OS_WIN)
+        dlUrl = cfg.winUrl;
+#elif defined(Q_OS_MACOS)
+        dlUrl = (runCmd("uname -m 2>/dev/null").trimmed() == "arm64")
+                    ? cfg.macArm64Url : cfg.macX86Url;
+#else
+        // Linux (apt) : à défaut d'URL directe, on contrôle au moins la
+        // résolution de l'hôte officiel MySQL.
+        dlUrl = cfg.winUrl;
+#endif
+        if (!checkDownloadConnectivity(dlUrl)) {
+            qApp->quit();
+            return;
         }
 
         // Bascule en mode Create avant l'installation (titre et bouton adaptés).
@@ -1661,6 +1682,51 @@ bool AppController::downloadFile(const QString& url, const QString& dest,
     runLongOp(QString("curl -fSL -o \"%1\" \"%2\"")
               .arg(QDir::toNativeSeparators(dest), url), label, 1800000);
     return QFile::exists(dest) && QFileInfo(dest).size() > 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Pré-requis réseau avant un téléchargement d'installation MySQL.
+//   1. Accès réseau (WAN) : on tente une connexion TCP directe vers une IP
+//      publique fiable (résolveurs Cloudflare/Google), SANS passer par le DNS,
+//      afin d'isoler le diagnostic « pas de réseau » de « DNS qui échoue ».
+//   2. Résolution du lien : on résout l'hôte de l'URL de téléchargement (DNS).
+//  En cas d'échec, un message explicite est affiché et la méthode renvoie false
+//  (l'appelant ferme alors le programme).
+// ─────────────────────────────────────────────────────────────────────────────
+bool AppController::checkDownloadConnectivity(const QString& downloadUrl)
+{
+    // 1. Accès WAN (connexion TCP/443 vers une IP publique, sans DNS).
+    auto hasWan = []() -> bool {
+        const QStringList ips = {"1.1.1.1", "8.8.8.8"};
+        for (const QString& ip : ips) {
+            QTcpSocket sock;
+            sock.connectToHost(ip, 443);
+            if (sock.waitForConnected(3000)) {
+                sock.abort();
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (!hasWan()) {
+        QMessageBox::critical(nullptr, tr("Pas d'accès réseau"),
+            tr("Absence d'accès réseau. Le programme ne peut pas télécharger "
+               "le fichier d'installation de MySQL.\n\nFermeture du programme."));
+        return false;
+    }
+
+    // 2. Résolution DNS de l'hôte du lien de téléchargement.
+    const QString host = QUrl(downloadUrl).host();
+    const QHostInfo info = QHostInfo::fromName(host);
+    if (info.error() != QHostInfo::NoError || info.addresses().isEmpty()) {
+        QMessageBox::critical(nullptr, tr("Lien de téléchargement introuvable"),
+            tr("Impossible de résoudre le lien de téléchargement. Le programme "
+               "ne peut pas télécharger le fichier d'installation de MySQL.\n\n"
+               "Fermeture du programme."));
+        return false;
+    }
+    return true;
 }
 
 QString AppController::getBrewPrefix()

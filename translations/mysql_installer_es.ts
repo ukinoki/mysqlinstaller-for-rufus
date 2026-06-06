@@ -139,6 +139,30 @@ Voulez-vous l&apos;installer maintenant (version %1) ?</source>
 ¿Desea instalarlo ahora (versión %1)?</translation>
     </message>
     <message>
+        <source>Pas d&apos;accès réseau</source>
+        <translation>Sin acceso a la red</translation>
+    </message>
+    <message>
+        <source>Absence d&apos;accès réseau. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
+
+Fermeture du programme.</source>
+        <translation>No hay acceso a la red. El programa no puede descargar el archivo de instalación de MySQL.
+
+El programa se cerrará.</translation>
+    </message>
+    <message>
+        <source>Lien de téléchargement introuvable</source>
+        <translation>Enlace de descarga no encontrado</translation>
+    </message>
+    <message>
+        <source>Impossible de résoudre le lien de téléchargement. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
+
+Fermeture du programme.</source>
+        <translation>No se puede resolver el enlace de descarga. El programa no puede descargar el archivo de instalación de MySQL.
+
+El programa se cerrará.</translation>
+    </message>
+    <message>
         <location filename="../src/appcontroller.cpp" line="404"/>
         <source>MySQL 8.4.3 (ou ultérieur) n&apos;est pas détecté sur ce système.</source>
         <translation>No se detecta MySQL 8.4.3 (o posterior) en este sistema.</translation>

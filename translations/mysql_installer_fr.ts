@@ -128,6 +128,26 @@ Voulez-vous l&apos;installer maintenant (version %1) ?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Pas d&apos;accès réseau</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Absence d&apos;accès réseau. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
+
+Fermeture du programme.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lien de téléchargement introuvable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Impossible de résoudre le lien de téléchargement. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
+
+Fermeture du programme.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/appcontroller.cpp" line="404"/>
         <source>MySQL 8.4.3 (ou ultérieur) n&apos;est pas détecté sur ce système.</source>
         <translation type="unfinished"></translation>
