@@ -24,3 +24,6 @@ ui_*.h
 
 # Traductions compilees (regenerees au build par lrelease)
 *.qm
+
+# Installeur généré (artefact de build)
+dist/

@@ -82,6 +82,44 @@ if ($windeployqt) {
     Write-Warning "Lancez-le depuis une invite ou Qt est sur le PATH, ou definissez `$env:QT_BIN."
 }
 
-Write-Host "`nLancez l'application en tant qu'administrateur :" -ForegroundColor Cyan
+Write-Host "`nDossier autonome pret. Lancez l'application en tant qu'administrateur :" -ForegroundColor Cyan
 Write-Host "  $($exe.FullName)"
 Write-Host "(L'invite UAC s'affiche automatiquement grace au manifeste embarque.)"
+
+# --- 6. Création de l'installeur (Inno Setup — optionnel) --------------------
+#  Inno Setup 6 : https://jrsoftware.org/isinfo.php
+#  Si ISCC.exe est present (PATH ou emplacement standard), on compile le .iss.
+Set-Location $root
+
+$iscc = $null
+$isccCandidates = @(
+    "iscc",
+    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+)
+foreach ($c in $isccCandidates) {
+    $found = Get-Command $c -ErrorAction SilentlyContinue
+    if ($found) { $iscc = $found.Source; break }
+    if (Test-Path $c) { $iscc = $c; break }
+}
+
+$issFile = Join-Path $root "MySQLInstallerForRufusSetup.iss"
+
+if ($iscc -and (Test-Path $issFile)) {
+    Write-Host "`n-> Inno Setup : creation de l'installeur..." -ForegroundColor Yellow
+    # Crée le dossier dist/ s'il n'existe pas
+    New-Item -ItemType Directory -Force -Path (Join-Path $root "dist") | Out-Null
+    & $iscc $issFile "/DSourceDir=$($exe.DirectoryName)"
+    $setupExe = Join-Path $root "dist\MySQLInstallerForRufusSetup.exe"
+    if (Test-Path $setupExe) {
+        Write-Host "`nInstalleur pret : $setupExe" -ForegroundColor Green
+    } else {
+        Write-Warning "ISCC a tourne mais MySQLInstallerForRufusSetup.exe est introuvable dans dist\."
+    }
+} elseif (-not (Test-Path $issFile)) {
+    Write-Host "`n(MySQLInstallerForRufusSetup.iss introuvable — etape installatour ignoree.)" -ForegroundColor DarkGray
+} else {
+    Write-Host "`nInno Setup non trouve : etape installatour ignoree." -ForegroundColor DarkGray
+    Write-Host "  Installez Inno Setup 6 depuis https://jrsoftware.org/isinfo.php"
+    Write-Host "  puis relancez ce script pour generer MySQLInstallerForRufusSetup.exe."
+}
