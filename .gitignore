@@ -21,3 +21,6 @@ ui_*.h
 *.pro.user.*
 .qtc_clangd/
 .cache/
+
+# Traductions compilees (regenerees au build par lrelease)
+*.qm
