@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QString>
 #include <QList>
+#include <QPair>
 #include "pages/credentialsdialog.h"
 
 struct MySQLRemoteConfig {
@@ -81,9 +82,11 @@ private:
     bool    guideMysqldFullDiskAccess(); // guide l'octroi du FDA à mysqld (ré-essai)
     QString getCnfVar(const QString& key);
     bool    setMyCnfVar(const QString& key, const QString& value);
-    //  Prépare une copie de my.cnf avec key=value (section [mysqld]) dans un
-    //  fichier temporaire, SANS élévation. Renvoie le chemin du temp (ou vide).
-    QString writeCnfToTemp(const QString& key, const QString& value);
+    //  Prépare une copie de my.cnf avec une ou plusieurs paires clé=valeur
+    //  (section [mysqld]) dans un fichier temporaire, SANS élévation. Renvoie le
+    //  chemin du temp (ou vide). Permet d'écrire plusieurs variables en une fois
+    //  (donc une seule élévation à la copie).
+    QString writeCnfToTemp(const QList<QPair<QString, QString>>& vars);
     QString getCnfPath();
     void    restartMySQL();
 

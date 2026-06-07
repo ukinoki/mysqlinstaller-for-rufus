@@ -1133,14 +1133,22 @@ void AppController::restartMySQL()
 //  root et redémarre mysqld.
 bool AppController::ensureSecureFilePriv()
 {
-    const QString target = sharedFolderPath();
-    if (getCnfVar("secure_file_priv") == target)
-        return true;   // déjà configuré : aucune élévation
+    const QString target  = sharedFolderPath();
+    const bool secureOk = (getCnfVar("secure_file_priv") == target);
 
 #if defined(Q_OS_LINUX)
-    // Linux : écrire my.cnf ET redémarrer le serveur en UNE SEULE élévation
-    // (pkexec) → une seule invite de mot de passe au lieu de deux.
-    const QString tmp = writeCnfToTemp("secure_file_priv", target);
+    // Sous Ubuntu, le paquet MySQL met « bind-address = 127.0.0.1 » par défaut,
+    // ce qui bloque les connexions distantes (appareils de mesure). On force
+    // 0.0.0.0 (toutes les interfaces). secure_file_priv ET bind-address sont
+    // écrits ensemble puis le serveur redémarré, en UNE SEULE élévation (pkexec).
+    const QString bindVal = getCnfVar("bind-address");
+    const bool bindOk = (bindVal == "0.0.0.0" || bindVal == "*");
+    if (secureOk && bindOk)
+        return true;   // déjà configuré : aucune élévation
+
+    const QString tmp = writeCnfToTemp({
+        qMakePair(QStringLiteral("secure_file_priv"), target),
+        qMakePair(QStringLiteral("bind-address"),     QStringLiteral("0.0.0.0")) });
     if (tmp.isEmpty())
         return false;
     const QString cnf = getCnfPath();
@@ -1153,6 +1161,8 @@ bool AppController::ensureSecureFilePriv()
     waitForMySQL(20);
     return getCnfVar("secure_file_priv") == target;
 #else
+    if (secureOk)
+        return true;   // déjà configuré : aucune élévation
     if (!setMyCnfVar("secure_file_priv", target))
         return false;
     restartMySQL();
@@ -1382,8 +1392,13 @@ bool AppController::setupSharedFolder()
             || !QString::fromUtf8(aa.readAll()).contains(path + "/"))
             return false;
         QFile smb("/etc/samba/smb.conf");
-        if (!smb.open(QIODevice::ReadOnly | QIODevice::Text)
-            || !QString::fromUtf8(smb.readAll()).contains("[Shared]"))
+        if (!smb.open(QIODevice::ReadOnly | QIODevice::Text))
+            return false;
+        const QString smbContent = QString::fromUtf8(smb.readAll());
+        if (!smbContent.contains("[Shared]"))
+            return false;
+        // Protocole NT1 accepté (certains appareils de mesure ne parlent que SMB1) ?
+        if (!smbContent.contains("NT1"))
             return false;
         // wsdd installé (découverte du partage depuis l'explorateur Windows) ?
         if (!runCmd("dpkg -s wsdd 2>/dev/null").contains("Status: install ok"))
@@ -1415,6 +1430,9 @@ bool AppController::setupSharedFolder()
         // — Samba : installer si absent puis partager —
         "dpkg -s samba >/dev/null 2>&1 || "
           "{ apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y samba; }; "
+        // — accepter le protocole NT1/SMB1 (appareils de mesure anciens) —
+        "grep -q 'server min protocol' /etc/samba/smb.conf 2>/dev/null || "
+          "sed -i '/^\\[global\\]/a server min protocol = NT1' /etc/samba/smb.conf; "
         "grep -q '^\\[Shared\\]' /etc/samba/smb.conf 2>/dev/null || "
           "printf '\\n[Shared]\\n   path = %1\\n   browseable = yes\\n"
           "   read only = no\\n   guest ok = yes\\n' >> /etc/samba/smb.conf; "
@@ -1447,14 +1465,18 @@ bool AppController::setupSharedFolder()
 // ─────────────────────────────────────────────────────────────────────────────
 //  Variables MySQL
 // ─────────────────────────────────────────────────────────────────────────────
-//  Construit une copie de my.cnf avec key=value dans [mysqld], écrite dans un
-//  fichier temporaire (AUCUNE élévation). Renvoie le chemin du temp, ou vide.
-QString AppController::writeCnfToTemp(const QString& key, const QString& value)
+//  Construit une copie de my.cnf avec les paires clé=valeur dans [mysqld],
+//  écrite dans un fichier temporaire (AUCUNE élévation). Renvoie le chemin du
+//  temp, ou vide. Les clés déjà présentes sont remplacées, les autres insérées
+//  juste après [mysqld] (section créée si absente).
+QString AppController::writeCnfToTemp(const QList<QPair<QString, QString>>& vars)
 {
     const QString path = getCnfPath();
     QFile   f(path);
     QStringList lines;
-    bool inMysqld = false, found = false;
+    bool inMysqld = false;
+    QStringList remaining;                 // clés pas encore rencontrées
+    for (const auto& kv : vars) remaining << kv.first;
 
     if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream ts(&f);
@@ -1465,23 +1487,40 @@ QString AppController::writeCnfToTemp(const QString& key, const QString& value)
                 { inMysqld = true;  lines << line; continue; }
             if (trimmed.startsWith('[') && trimmed != "[mysqld]")
                 inMysqld = false;
-            if (inMysqld && (trimmed.startsWith(key + "=") ||
-                             trimmed.startsWith(key + " ")))
-                { lines << key + " = " + value; found = true; continue; }
-            lines << line;
+            bool replaced = false;
+            if (inMysqld) {
+                for (const auto& kv : vars) {
+                    if (trimmed.startsWith(kv.first + "=") ||
+                        trimmed.startsWith(kv.first + " ")) {
+                        lines << kv.first + " = " + kv.second;
+                        remaining.removeAll(kv.first);
+                        replaced = true;
+                        break;
+                    }
+                }
+            }
+            if (!replaced) lines << line;
         }
         f.close();
     }
 
-    if (!found) {
-        bool inserted = false;
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines[i].trimmed() == "[mysqld]") {
-                lines.insert(i + 1, key + " = " + value);
-                inserted = true; break;
-            }
+    // Clés non présentes : insérées juste après [mysqld] (créé si absent).
+    if (!remaining.isEmpty()) {
+        QStringList toInsert;
+        for (const auto& kv : vars)
+            if (remaining.contains(kv.first))
+                toInsert << kv.first + " = " + kv.second;
+        int idx = -1;
+        for (int i = 0; i < lines.size(); i++)
+            if (lines[i].trimmed() == "[mysqld]") { idx = i; break; }
+        if (idx >= 0) {
+            for (int j = toInsert.size() - 1; j >= 0; --j)
+                lines.insert(idx + 1, toInsert[j]);
+        } else {
+            for (int j = toInsert.size() - 1; j >= 0; --j)
+                lines.prepend(toInsert[j]);
+            lines.prepend("[mysqld]");
         }
-        if (!inserted) { lines.prepend(key + " = " + value); lines.prepend("[mysqld]"); }
     }
 
     const QString tmp = QDir::tempPath() + "/mysql_conf.new";
@@ -1500,7 +1539,7 @@ bool AppController::setMyCnfVar(const QString& key, const QString& value)
 {
     // Le fichier de conf appartient au système : on écrit le contenu dans un
     // fichier temporaire, puis on le copie en place avec les droits administrateur.
-    const QString tmp = writeCnfToTemp(key, value);
+    const QString tmp = writeCnfToTemp({ qMakePair(key, value) });
     if (tmp.isEmpty())
         return false;
     const QString path = getCnfPath();

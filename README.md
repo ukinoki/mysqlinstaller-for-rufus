@@ -80,8 +80,9 @@ Tout le code spécifique est isolé par compilation conditionnelle
 | Droits admin | groupe `admin` (+ `osascript` pour l'élévation) | processus **élevé** (manifeste UAC) | groupe `sudo`/root (+ **`pkexec`**) |
 | Installation MySQL | DMG Oracle + `installer` | **archive ZIP** + `mysqld --initialize-insecure` + `--install` (service) | **`apt-get install mysql-server`** |
 | Service | `launchctl` / `brew services` | `net start/stop MySQL` | `systemctl … mysql` |
-| Dossier partagé | `/Users/Shared` (partage SMB) | `C:\Users\Public` (déjà partagé) | `/Users/Shared` (créé, AppArmor, `ufw allow 3306`, Samba, `wsdd`) |
+| Dossier partagé | `/Users/Shared` (partage SMB) | `C:\Users\Public` (déjà partagé) | `/Users/Shared` (créé, AppArmor, `ufw allow 3306`, Samba **+ NT1/SMB1**, `wsdd`) |
 | Fichier de conf | `/etc/my.cnf` | `C:\ProgramData\MySQL\MySQL Server 8.4\my.ini` | `…/mysql.conf.d/mysqld.cnf` |
+| `secure_file_priv` / accès distant | `secure_file_priv` | `secure_file_priv` | `secure_file_priv` **+ `bind-address = 0.0.0.0`** (le paquet apt écoute sinon sur `127.0.0.1`) |
 | `PATH` | `/etc/paths.d/mysql` | `PATH` *Machine* (registre) | `/etc/profile.d/mysql.sh` |
 | Désinstallation | — | **entrée « Applications et fonctionnalités »** (registre `Uninstall` + script auto-élevant, taille affichée) | — |
 
