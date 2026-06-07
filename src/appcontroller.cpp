@@ -108,20 +108,6 @@ static void waitProcessResponsive(QProcess& p, int timeoutMs)
     }
 }
 
-//  [Diagnostic] Journalise une étape dans /tmp/rufus_steps.log (Linux). Sert à
-//  comprendre quelle vérification « déjà fait ? » échoue et provoque une
-//  ré-élévation (invite pkexec). À retirer une fois le mode Create stabilisé.
-static void logStep(const QString& msg)
-{
-#if defined(Q_OS_LINUX)
-    QFile f("/tmp/rufus_steps.log");
-    if (f.open(QIODevice::Append | QIODevice::Text))
-        QTextStream(&f) << msg << '\n';
-#else
-    Q_UNUSED(msg);
-#endif
-}
-
 //  Compare deux numéros de version « pointés » (ex. « 8.4.8 » vs « 8.4.3 »).
 //  Renvoie true si « ver » est supérieur OU égal à « minVer », composant par
 //  composant. Une version vide/inconnue est considérée comme inférieure.
@@ -560,7 +546,6 @@ void AppController::run()
 // ═════════════════════════════════════════════════════════════════════════════
 void AppController::onCredentialsAccepted()
 {
-    QFile::remove("/tmp/rufus_steps.log");   // [diagnostic] journal d'étapes neuf
     m_login    = m_dialog->login();
     m_password = m_dialog->password();
     m_dialog->uncheckAllSteps();
@@ -1238,14 +1223,7 @@ bool AppController::ensureSecureFilePriv()
     // Déjà toutes configurées ? → aucune élévation.
     bool allOk = true;
     for (const auto& kv : vars)
-        if (getCnfVar(kv.first) != kv.second) {
-            allOk = false;
-            logStep(QString("ensureSecureFilePriv: FAIL %1 lu='%2' attendu='%3'")
-                    .arg(kv.first, getCnfVar(kv.first), kv.second));
-            break;
-        }
-    logStep(QString("ensureSecureFilePriv: allOk=%1")
-            .arg(allOk ? "OK (skip)" : "FAIL (élève)"));
+        if (getCnfVar(kv.first) != kv.second) { allOk = false; break; }
     if (allOk)
         return true;
 
@@ -1469,9 +1447,7 @@ bool AppController::createUser()
 #if defined(Q_OS_LINUX)
     // Déjà créé (ex. par prepareCreateModeLinux) ? On court-circuite pour ne pas
     // redemander le mot de passe système.
-    const bool already = tryConnect();
-    logStep(QString("createUser: tryConnect=%1").arg(already ? "OK (skip)" : "FAIL (élève)"));
-    if (already)
+    if (tryConnect())
         return true;
 #endif
 
@@ -1540,8 +1516,10 @@ bool AppController::prepareCreateModeLinux()
 
     const QString script =
         "IFS= read -r PW\n"
-        // Journal de diagnostic (le mot de passe n'y apparaît jamais : pas de
-        // set -x, et le SQL part dans le tube vers mysql, pas sur la sortie).
+        // Journal de support /tmp/rufus_prepare.log : conserve la sortie de
+        // l'install (apt, marqueurs, codes retour) pour dépanner en cas de souci.
+        // Le mot de passe n'y apparaît JAMAIS (pas de set -x ; le SQL part dans le
+        // tube vers mysql, pas sur la sortie ; smbpasswd -s est silencieux).
         "exec >/tmp/rufus_prepare.log 2>&1\n"
         "echo '### createUser ###'; "
         + userSql
@@ -1635,30 +1613,27 @@ bool AppController::setupSharedFolder()
     // paramétrée pour Rufus, où l'on ne veut PAS redemander le mot de passe.
     auto alreadyConfigured = [&]() -> bool {
         if (!QDir(path + "/Rufus/Imagerie").exists())
-            { logStep("  setup: FAIL dossier Rufus/Imagerie manquant"); return false; }
+            return false;
         // AppArmor : si un profil mysqld EXISTE, il doit être neutralisé (lien
         // dans disable/). S'il n'y a pas de profil, il n'y a rien à désactiver.
         if (QFileInfo::exists("/etc/apparmor.d/usr.sbin.mysqld")
             && !QFileInfo("/etc/apparmor.d/disable/usr.sbin.mysqld").isSymLink())
-            { logStep("  setup: FAIL AppArmor non désactivé"); return false; }
+            return false;
         QFile smb("/etc/samba/smb.conf");
         if (!smb.open(QIODevice::ReadOnly | QIODevice::Text))
-            { logStep("  setup: FAIL smb.conf illisible"); return false; }
+            return false;
         const QString smbContent = QString::fromUtf8(smb.readAll());
         if (!smbContent.contains("[Rufus]"))
-            { logStep("  setup: FAIL [Rufus] absent de smb.conf"); return false; }
+            return false;
         // Protocole NT1 accepté (certains appareils de mesure ne parlent que SMB1) ?
         if (!smbContent.contains("NT1"))
-            { logStep("  setup: FAIL NT1 absent de smb.conf"); return false; }
+            return false;
         // wsdd installé (découverte du partage depuis l'explorateur Windows) ?
         if (!runCmd("dpkg -s wsdd 2>/dev/null").contains("Status: install ok"))
-            { logStep("  setup: FAIL wsdd non installé"); return false; }
+            return false;
         return true;
     };
-    const bool already = alreadyConfigured();
-    logStep(QString("setupSharedFolder: alreadyConfigured=%1")
-            .arg(already ? "OK (skip)" : "FAIL (élève)"));
-    if (already)
+    if (alreadyConfigured())
         return true;
 
     // Sinon, tout le paramétrage privilégié en une seule élévation (pkexec). Le
