@@ -192,8 +192,10 @@ mysql_installer/
 ## Points à valider (Linux / divers)
 
 - **Linux — version MySQL** : `apt` fournit MySQL **8.0.x** par défaut sous Ubuntu.
-  Le programme accepte ≥ 8.4.3 ; pour installer 8.4.9 il faut **ajouter le dépôt
-  APT MySQL 8.4** (l'`apt-get install mysql-server` actuel ne suffit pas).
+  Rufus fonctionnant bien avec 8.0, le seuil minimal est **≥ 8.0 sous Linux**
+  (clé `min_version_linux` du `mysql_config.json`), contre ≥ 8.4.3 sous
+  Windows/macOS. Une 8.0 déjà installée est donc acceptée telle quelle (pas de
+  mise à jour forcée vers 8.4).
 - **Linux** : build et déroulé complet **encore à valider** ; dépendances runtime
   `pkexec`, `ufw`, `apparmor_parser`, `samba`.
 - **macOS** : le nom exact du DMG 8.4.9 (`mysql-8.4.9-macos14|15-*.dmg`) est à

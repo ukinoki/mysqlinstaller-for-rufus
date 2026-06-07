@@ -111,7 +111,14 @@ MySQLRemoteConfig AppController::defaultMySQLConfig()
 {
     MySQLRemoteConfig c;
     c.version     = "8.4.9";
+    // Seuil minimal accepté en mode Verify. Sous Linux on est plus tolérant :
+    // Rufus fonctionne bien avec MySQL 8.0 (la version fournie par apt), inutile
+    // d'imposer 8.4. Sous Windows/macOS on installe 8.4, donc seuil 8.4.3.
+#if defined(Q_OS_LINUX)
+    c.minVersion  = "8.0";
+#else
     c.minVersion  = "8.4.3";
+#endif
     c.winUrl      = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-winx64.zip";
     c.macArm64Url = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-macos14-arm64.dmg";
     c.macX86Url   = "https://dev.mysql.com/get/Downloads/MySQL-8.4/mysql-8.4.9-macos14-x86_64.dmg";
@@ -152,6 +159,10 @@ MySQLRemoteConfig AppController::fetchRemoteConfig()
         if (!obj.isEmpty()) {
             if (obj.contains("mysql_version"))  m_remoteConfig.version     = obj["mysql_version"].toString();
             if (obj.contains("min_version"))     m_remoteConfig.minVersion  = obj["min_version"].toString();
+#if defined(Q_OS_LINUX)
+            // Sous Linux, un seuil dédié (plus tolérant) prime s'il est défini.
+            if (obj.contains("min_version_linux")) m_remoteConfig.minVersion = obj["min_version_linux"].toString();
+#endif
             if (obj.contains("win_url"))         m_remoteConfig.winUrl      = obj["win_url"].toString();
             if (obj.contains("mac_arm64_url"))   m_remoteConfig.macArm64Url = obj["mac_arm64_url"].toString();
             if (obj.contains("mac_x86_url"))     m_remoteConfig.macX86Url   = obj["mac_x86_url"].toString();
