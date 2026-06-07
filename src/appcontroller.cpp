@@ -1395,7 +1395,7 @@ bool AppController::setupSharedFolder()
         if (!smb.open(QIODevice::ReadOnly | QIODevice::Text))
             return false;
         const QString smbContent = QString::fromUtf8(smb.readAll());
-        if (!smbContent.contains("[Shared]"))
+        if (!smbContent.contains("[Rufus]"))
             return false;
         // Protocole NT1 accepté (certains appareils de mesure ne parlent que SMB1) ?
         if (!smbContent.contains("NT1"))
@@ -1435,9 +1435,12 @@ bool AppController::setupSharedFolder()
         // — accepter le protocole NT1/SMB1 (appareils de mesure anciens) —
         "grep -q 'server min protocol' /etc/samba/smb.conf 2>/dev/null || "
           "sed -i '/^\\[global\\]/a server min protocol = NT1' /etc/samba/smb.conf; "
-        "grep -q '^\\[Shared\\]' /etc/samba/smb.conf 2>/dev/null || "
-          "printf '\\n[Shared]\\n   path = %1\\n   browseable = yes\\n"
-          "   read only = no\\n   guest ok = yes\\n' >> /etc/samba/smb.conf; "
+        // — partage du dossier Rufus (/Users/Shared/Rufus) : Rufus y crée ses
+        //   sous-dossiers, accessibles aux autres postes et aux appareils —
+        "grep -q '^\\[Rufus\\]' /etc/samba/smb.conf 2>/dev/null || "
+          "printf '\\n[Rufus]\\n   comment = Rufus\\n   path = %1/Rufus\\n"
+          "   browseable = yes\\n   read only = no\\n   guest ok = yes\\n"
+          "   create mask = 0755\\n   directory mask = 0755\\n' >> /etc/samba/smb.conf; "
         "systemctl restart smbd 2>/dev/null || service smbd restart 2>/dev/null || true; "
         // — wsdd : découverte WSD pour que le partage apparaisse sous Windows —
         "dpkg -s wsdd >/dev/null 2>&1 || "

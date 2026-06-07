@@ -65,9 +65,10 @@ echo "==> 5/7  Retrait du partage Samba [Shared], purge de samba et de wsdd…"
 # Retire d'abord proprement la section [Shared] (au cas où samba serait conservé).
 SMB="/etc/samba/smb.conf"
 if [ -f "$SMB" ]; then
-    # supprime la ligne [Shared] et toutes les lignes suivantes jusqu'à la
-    # prochaine section [..] (ou la fin du fichier).
-    sed -i '/^\[Shared\]/,/^\[/ { /^\[Shared\]/d; /^\[/!d }' "$SMB"
+    # supprime la section [Rufus] (et la directive NT1) ; les lignes de la
+    # section sont retirées jusqu'à la prochaine section [..] ou la fin du fichier.
+    sed -i '/^\[Rufus\]/,/^\[/ { /^\[Rufus\]/d; /^\[/!d }' "$SMB"
+    sed -i '/server min protocol = NT1/d' "$SMB"
 fi
 systemctl stop smbd nmbd 2>/dev/null
 # wsdd : démon de découverte WSD (rend le partage visible depuis Windows 10/11).
