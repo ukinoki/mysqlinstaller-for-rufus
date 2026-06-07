@@ -139,6 +139,14 @@ Voulez-vous l&apos;installer maintenant (version %1) ?</source>
 Do you want to install it now (version %1)?</translation>
     </message>
     <message>
+        <source>MySQL n&apos;est pas installé sur cet ordinateur.
+
+Voulez-vous installer MySQL maintenant ?</source>
+        <translation>MySQL is not installed on this computer.
+
+Do you want to install MySQL now?</translation>
+    </message>
+    <message>
         <source>Mise à jour de MySQL nécessaire</source>
         <translation>MySQL update required</translation>
     </message>

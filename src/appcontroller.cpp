@@ -497,9 +497,19 @@ void AppController::run()
         // Bascule en mode Create AVANT la boîte (transition masquée par la boîte
         // modale → pas de scintillement).
         m_dialog->setMode(CredentialsDialog::Mode::Create);
-        if (!askYesNo(tr("Installation de MySQL"),
-                tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
-                   "Voulez-vous l'installer maintenant (version %1) ?").arg(cfg.version))) {
+        // Le numéro de version n'est annoncé que là où le programme installe une
+        // version précise (Windows/macOS = 8.4.9). Sous Linux, c'est apt qui
+        // fournit la version (8.0.x) → on n'affiche pas de numéro.
+#if defined(Q_OS_LINUX)
+        const QString installMsg =
+            tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
+               "Voulez-vous installer MySQL maintenant ?");
+#else
+        const QString installMsg =
+            tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
+               "Voulez-vous l'installer maintenant (version %1) ?").arg(cfg.version);
+#endif
+        if (!askYesNo(tr("Installation de MySQL"), installMsg)) {
             qApp->quit(); return;
         }
         needInstall = true;
