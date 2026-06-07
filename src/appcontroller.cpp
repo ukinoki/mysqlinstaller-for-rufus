@@ -995,6 +995,17 @@ bool AppController::initOracleDataDir()
         "--user=\"$OWNER\" --basedir=\"$PREFIX\" --datadir=\"$DATA\" --tmpdir=/tmp\n"
         "  echo \"mysqld --initialize rc=$?\"\n"
         "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
+        // Démarrage du serveur DANS le même contexte root (sinon il faudrait une
+        // 2e invite) : démon launchd si présent (persiste au redémarrage), sinon
+        // mysql.server. TMPDIR reste /tmp pour le serveur ainsi lancé.
+        "  PLIST=/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist\n"
+        "  if [ -f \"$PLIST\" ]; then\n"
+        "    echo \"-- launchctl load $PLIST --\"\n"
+        "    launchctl load -w \"$PLIST\"\n"
+        "  else\n"
+        "    echo \"-- mysql.server start --\"\n"
+        "    \"$PREFIX/support-files/mysql.server\" start\n"
+        "  fi\n"
         "} >> \"$LOG\" 2>&1\n"
         "chmod 644 \"$LOG\" 2>/dev/null\n")
         .arg(prefix, data, owner, m_initLog);
@@ -1004,7 +1015,14 @@ bool AppController::initOracleDataDir()
         logLine("ATTENTION : l'élévation (osascript admin) a été annulée ou a échoué.");
 
     // Succès = le dictionnaire de données a bien été créé.
-    return QFileInfo::exists(data + "/mysql.ibd");
+    const bool ok = QFileInfo::exists(data + "/mysql.ibd");
+    if (ok) {
+        // Le script root a aussi démarré le serveur : on patiente qu'il accepte
+        // les connexions, pour que startMySQL() le voie déjà actif (pas de 2e invite).
+        logLine("Initialisation OK — attente du démarrage du serveur…");
+        waitForMySQL(20);
+    }
+    return ok;
 }
 
 bool AppController::installMySQL()
@@ -1244,15 +1262,19 @@ bool AppController::startMySQL()
     runCmdElevated("systemctl start mysql");
 #else
     if (isOracleInstall()) {
-        // MySQL 8.4.x : le pkg Oracle n'initialise plus le datadir. Si la base
-        // n'est pas initialisée, mysqld ne démarrera jamais → on le fait d'abord
-        // (no-op si déjà initialisé : aucune invite, données existantes intactes).
-        initOracleDataDir();
+        // MySQL 8.4.x : le pkg Oracle n'initialise plus le datadir. L'init (élevée)
+        // le fait ET démarre le serveur ; s'il tourne déjà après ça, terminé (no-op
+        // si déjà initialisé : données existantes intactes).
+        if (initOracleDataDir() && isServerRunning())
+            return true;
+        // Démarrage du démon système macOS : exige root → élévation (sinon
+        // « launchctl load » d'un LaunchDaemon échoue silencieusement).
         QString plist = "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist";
         if (QFile::exists(plist))
-            runCmdFull(QString("launchctl load -w '%1' 2>&1").arg(plist), 15000);
+            runCmdElevated(QString("launchctl load -w '%1'").arg(plist));
         else
-            runCmdFull("/usr/local/mysql/support-files/mysql.server start 2>&1", 30000);
+            runCmdElevated("TMPDIR=/tmp "
+                           "/usr/local/mysql/support-files/mysql.server start");
     } else {
         runCmdFull("brew services start mysql@8.4 2>&1", 15000);
     }
