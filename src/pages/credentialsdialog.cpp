@@ -212,6 +212,10 @@ QString CredentialsDialog::password() const { return m_password->text(); }
 void CredentialsDialog::setMode(Mode mode)
 {
     if (m_mode == mode) return;
+    // On gèle les redessins le temps de tout reconfigurer (affichage/masquage du
+    // champ de confirmation, retranslation, redimensionnement) : sinon la fiche
+    // « clignote » en repassant brièvement par un état intermédiaire.
+    setUpdatesEnabled(false);
     m_mode = mode;
     const bool create = (mode == Mode::Create);
     m_confirmLabel->setVisible(create);
@@ -219,6 +223,7 @@ void CredentialsDialog::setMode(Mode mode)
     retranslateUi();
     onInputsChanged();    // critères/cadre dépendent du mode
     adjustSize();
+    setUpdatesEnabled(true);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

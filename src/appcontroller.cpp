@@ -1553,11 +1553,13 @@ QString AppController::linuxFolderSambaScript(const QString& path,
         "fi; "
         // — pare-feu : ouvrir le port MySQL —
         "ufw allow 3306 || true; "
-        // — Samba : installer si absent (apt lit /dev/null pour ne pas consommer
-        //   le mot de passe présent sur l'entrée standard) —
-        "dpkg -s samba >/dev/null 2>&1 || "
-          "{ apt-get update </dev/null; DEBIAN_FRONTEND=noninteractive "
-          "apt-get install -y samba </dev/null; }; "
+        // — Samba + wsdd : installés ENSEMBLE si l'un manque (un seul apt-get
+        //   update + un seul install → beaucoup plus rapide). apt lit /dev/null
+        //   pour ne pas consommer le mot de passe présent sur l'entrée standard. —
+        "if ! dpkg -s samba >/dev/null 2>&1 || ! dpkg -s wsdd >/dev/null 2>&1; then "
+          "apt-get update </dev/null; "
+          "DEBIAN_FRONTEND=noninteractive apt-get install -y samba wsdd </dev/null; "
+        "fi; "
         // — protocole NT1/SMB1 (appareils de mesure anciens) —
         "grep -q 'server min protocol' /etc/samba/smb.conf 2>/dev/null || "
           "sed -i '/^\\[global\\]/a server min protocol = NT1' /etc/samba/smb.conf; "
@@ -1570,10 +1572,7 @@ QString AppController::linuxFolderSambaScript(const QString& path,
         //   smbpasswd -s (2 lignes) via printf. Accès Windows 10/11 authentifié. —
         "printf '%s\\n%s\\n' \"$PW\" \"$PW\" | smbpasswd -s -a '%2' >/dev/null 2>&1 || true; "
         "systemctl restart smbd 2>/dev/null || service smbd restart 2>/dev/null || true; "
-        // — wsdd : découverte WSD (partage visible sous Windows 10/11) —
-        "dpkg -s wsdd >/dev/null 2>&1 || "
-          "{ apt-get update </dev/null; DEBIAN_FRONTEND=noninteractive "
-          "apt-get install -y wsdd </dev/null; }; "
+        // — wsdd : activer le service (déjà installé ci-dessus) —
         "systemctl enable --now wsdd 2>/dev/null || true"
         ).arg(path, user);
 }
