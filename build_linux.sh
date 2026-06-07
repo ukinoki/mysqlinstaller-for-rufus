@@ -70,7 +70,7 @@ mkdir -p "$APPDIR/usr/bin" \
 cp "$EXE" "$APPDIR/usr/bin/"
 cp "$ROOT/resources/mysqlinstaller.desktop" \
    "$APPDIR/usr/share/applications/mysqlinstaller.desktop"
-cp "$ROOT/resources/mysql.png" \
+cp "$ROOT/resources/mysqlinstaller.png" \
    "$APPDIR/usr/share/icons/hicolor/256x256/apps/mysqlinstaller.png"
 
 # --- 4. Outils linuxdeploy (PATH ou téléchargement) --------------------------
