@@ -392,11 +392,6 @@ Para concederlo:
         <translation>Reintentar</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1108"/>
-        <source>Annuler</source>
-        <translation>Cancelar</translation>
-    </message>
-    <message>
         <location filename="../src/appcontroller.cpp" line="460"/>
         <source>Connexion impossible avec le login « %1 ».
 Vérifiez le login et le mot de passe.</source>
