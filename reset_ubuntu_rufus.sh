@@ -38,13 +38,16 @@ read -r -p "Confirmer ? Tapez 'oui' : " ans
 
 echo
 echo "==> 1/7  Arrêt et purge de MySQL…"
-systemctl stop mysql  2>/dev/null
-systemctl stop mysqld 2>/dev/null
-systemctl stop mariadb 2>/dev/null
-# Purge large (serveur ET client), comme la procédure Rufus (apt remove --purge mysql*).
-DEBIAN_FRONTEND=noninteractive apt-get purge -y 'mysql.*' 'mariadb.*' 2>/dev/null
-DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge 2>/dev/null
-apt-get autoclean 2>/dev/null
+systemctl stop mysql mysqld mariadb 2>/dev/null
+# IMPORTANT : purger CHAQUE motif dans sa PROPRE commande apt. Un seul motif
+# sans correspondance (ex. 'mariadb.*' si MariaDB n'est pas là) fait sinon
+# échouer apt qui n'enlève RIEN du tout — c'était la cause du reset raté.
+for pat in 'mysql-server.*' 'mysql-client.*' 'libmysqlclient.*' 'mysql-common' \
+           'mysql.*' 'mariadb.*'; do
+    DEBIAN_FRONTEND=noninteractive apt-get purge -y "$pat" 2>/dev/null || true
+done
+DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge 2>/dev/null || true
+apt-get autoclean 2>/dev/null || true
 rm -rf /etc/mysql /var/lib/mysql /var/log/mysql /var/lib/mysql-files /var/lib/mysql-keyring
 
 echo "==> 2/7  Suppression du PATH (/etc/profile.d/mysql.sh)…"
@@ -90,5 +93,13 @@ echo "==> 7/7  Nettoyage des fichiers temporaires de l'installeur…"
 rm -f /tmp/mysqlinstaller_priv.sh /tmp/mysql_conf.new /tmp/mysql.path
 
 echo
-echo "✅ Terminé. La machine est revenue à un état vierge."
-echo "   (Un redémarrage est conseillé pour réinitialiser le PATH des shells.)"
+# Vérification : le serveur est-il réellement parti ?
+if dpkg -l 2>/dev/null | grep -qE '^ii +(mysql-server|mariadb-server)' \
+   || [ -x /usr/sbin/mysqld ] || [ -x /usr/sbin/mariadbd ]; then
+    echo "⚠️  ATTENTION : le serveur MySQL/MariaDB est ENCORE présent."
+    echo "    Purge manuelle : sudo apt-get purge -y 'mysql.*' ; sudo apt-get autoremove -y --purge"
+    echo "    Vérifiez aussi un éventuel verrou apt (un autre apt/maj en cours ?)."
+else
+    echo "✅ Terminé. Serveur MySQL/MariaDB bien désinstallé — machine vierge."
+    echo "   (Un redémarrage est conseillé pour réinitialiser le PATH des shells.)"
+fi
