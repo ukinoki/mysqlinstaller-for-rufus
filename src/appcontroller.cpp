@@ -1135,11 +1135,29 @@ bool AppController::ensureSecureFilePriv()
 {
     const QString target = sharedFolderPath();
     if (getCnfVar("secure_file_priv") == target)
-        return true;
+        return true;   // déjà configuré : aucune élévation
+
+#if defined(Q_OS_LINUX)
+    // Linux : écrire my.cnf ET redémarrer le serveur en UNE SEULE élévation
+    // (pkexec) → une seule invite de mot de passe au lieu de deux.
+    const QString tmp = writeCnfToTemp("secure_file_priv", target);
+    if (tmp.isEmpty())
+        return false;
+    const QString cnf = getCnfPath();
+    const bool ok = runCmdElevated(QString(
+        "cp '%1' '%2' && chmod 644 '%2' && systemctl restart mysql")
+        .arg(tmp, cnf));
+    QFile::remove(tmp);
+    if (!ok)
+        return false;
+    waitForMySQL(20);
+    return getCnfVar("secure_file_priv") == target;
+#else
     if (!setMyCnfVar("secure_file_priv", target))
         return false;
     restartMySQL();
     return getCnfVar("secure_file_priv") == target;
+#endif
 }
 
 //  Vérifie que mysql sait ÉCRIRE puis RELIRE un fichier dans /Users/Shared.
@@ -1352,7 +1370,27 @@ bool AppController::setupSharedFolder()
     // tous les comptes Windows : aucun partage supplémentaire à configurer.
     return QDir(path).exists();
 #elif defined(Q_OS_LINUX)
-    // Tout le paramétrage privilégié en une seule élévation (pkexec) :
+    // Déjà configuré ? Vérifications NON privilégiées (aucune invite pkexec) :
+    // dossier présent + règle AppArmor pour le dossier + partage Samba déclaré.
+    // Si tout est en place, on s'arrête là — cas typique d'une machine déjà
+    // paramétrée pour Rufus, où l'on ne veut PAS redemander le mot de passe.
+    auto alreadyConfigured = [&]() -> bool {
+        if (!QDir(path).exists())
+            return false;
+        QFile aa("/etc/apparmor.d/local/usr.sbin.mysqld");
+        if (!aa.open(QIODevice::ReadOnly | QIODevice::Text)
+            || !QString::fromUtf8(aa.readAll()).contains(path + "/"))
+            return false;
+        QFile smb("/etc/samba/smb.conf");
+        if (!smb.open(QIODevice::ReadOnly | QIODevice::Text)
+            || !QString::fromUtf8(smb.readAll()).contains("[Shared]"))
+            return false;
+        return true;
+    };
+    if (alreadyConfigured())
+        return true;
+
+    // Sinon, tout le paramétrage privilégié en une seule élévation (pkexec) :
     //   • créer /Users/Shared, propriétaire = utilisateur courant ;
     //   • AppArmor : autoriser mysqld à accéder au dossier ;
     //   • ouvrir le port 3306 (ufw) ;
@@ -1401,9 +1439,11 @@ bool AppController::setupSharedFolder()
 // ─────────────────────────────────────────────────────────────────────────────
 //  Variables MySQL
 // ─────────────────────────────────────────────────────────────────────────────
-bool AppController::setMyCnfVar(const QString& key, const QString& value)
+//  Construit une copie de my.cnf avec key=value dans [mysqld], écrite dans un
+//  fichier temporaire (AUCUNE élévation). Renvoie le chemin du temp, ou vide.
+QString AppController::writeCnfToTemp(const QString& key, const QString& value)
 {
-    QString path = getCnfPath();
+    const QString path = getCnfPath();
     QFile   f(path);
     QStringList lines;
     bool inMysqld = false, found = false;
@@ -1436,17 +1476,26 @@ bool AppController::setMyCnfVar(const QString& key, const QString& value)
         if (!inserted) { lines.prepend(key + " = " + value); lines.prepend("[mysqld]"); }
     }
 
-    // Le fichier de conf appartient au système : on écrit le contenu dans un
-    // fichier temporaire, puis on le copie en place avec les droits administrateur.
     const QString tmp = QDir::tempPath() + "/mysql_conf.new";
     QFile out(tmp);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Text))
-        return false;
+        return {};
     {
         QTextStream ts(&out);
         for (const QString& l : lines) ts << l << '\n';
     }
     out.close();
+    return tmp;
+}
+
+bool AppController::setMyCnfVar(const QString& key, const QString& value)
+{
+    // Le fichier de conf appartient au système : on écrit le contenu dans un
+    // fichier temporaire, puis on le copie en place avec les droits administrateur.
+    const QString tmp = writeCnfToTemp(key, value);
+    if (tmp.isEmpty())
+        return false;
+    const QString path = getCnfPath();
 
 #if defined(Q_OS_WIN)
     const QString src = QString(tmp).replace('/', '\\');

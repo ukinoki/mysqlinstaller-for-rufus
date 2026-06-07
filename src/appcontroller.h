@@ -81,6 +81,9 @@ private:
     bool    guideMysqldFullDiskAccess(); // guide l'octroi du FDA à mysqld (ré-essai)
     QString getCnfVar(const QString& key);
     bool    setMyCnfVar(const QString& key, const QString& value);
+    //  Prépare une copie de my.cnf avec key=value (section [mysqld]) dans un
+    //  fichier temporaire, SANS élévation. Renvoie le chemin du temp (ou vide).
+    QString writeCnfToTemp(const QString& key, const QString& value);
     QString getCnfPath();
     void    restartMySQL();
 
