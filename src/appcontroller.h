@@ -103,7 +103,10 @@ private:
     bool    askUpdateConfirmation(const QString& currentVer, const QString& targetVer);
     QString runCmd(const QString& cmd, int timeoutMs = 30000);
     QString runCmdFull(const QString& cmd, int timeoutMs = 30000);
-    bool    runCmdElevated(const QString& cmd);   // exécution avec droits admin
+    //  Exécution avec droits admin. stdinData (Linux uniquement) : données
+    //  fournies sur l'entrée standard du processus élevé (ex. mot de passe pour
+    //  smbpasswd) — jamais sur disque, ni en argument, ni dans les logs.
+    bool    runCmdElevated(const QString& cmd, const QString& stdinData = {});
     void    runLongOp(const QString& cmd, const QString& label,
                       int timeoutMs = 360000);
     //  Comme runLongOp mais avec barre de % : la commande émet « PROGRESS f t ».

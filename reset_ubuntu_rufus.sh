@@ -78,7 +78,7 @@ systemctl stop smbd nmbd 2>/dev/null
 systemctl stop wsdd 2>/dev/null
 DEBIAN_FRONTEND=noninteractive apt-get purge -y 'samba.*' 'samba-common.*' wsdd 2>/dev/null
 DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge 2>/dev/null
-rm -rf /etc/samba
+rm -rf /etc/samba /var/lib/samba          # /var/lib/samba : base des comptes Samba
 
 echo "==> 6/7  Suppression du dossier partagé $SHARED…"
 rm -rf "$SHARED"

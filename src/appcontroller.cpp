@@ -1429,7 +1429,8 @@ bool AppController::setupSharedFolder()
     //   • créer /Users/Shared/Rufus/Imagerie, droits 755, propriétaire = user ;
     //   • AppArmor : désactiver le profil mysqld (lecture des images) ;
     //   • ouvrir le port 3306 (ufw) ;
-    //   • installer Samba si besoin et partager le dossier sur le réseau ;
+    //   • installer Samba si besoin et partager le dossier (invité + NT1) ;
+    //   • créer un utilisateur Samba = compte Ubuntu (accès Windows 10/11) ;
     //   • installer wsdd pour rendre le partage visible sous Windows 10/11.
     const QString user = runCmd("id -un 2>/dev/null").trimmed();
     const QString script = QString(
@@ -1446,9 +1447,11 @@ bool AppController::setupSharedFolder()
         "fi; "
         // — pare-feu : ouvrir le port MySQL —
         "ufw allow 3306 || true; "
-        // — Samba : installer si absent puis partager —
+        // — Samba : installer si absent puis partager (apt lit /dev/null, pour ne
+        //   pas consommer le mot de passe Samba présent sur l'entrée standard) —
         "dpkg -s samba >/dev/null 2>&1 || "
-          "{ apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y samba; }; "
+          "{ apt-get update </dev/null; DEBIAN_FRONTEND=noninteractive "
+          "apt-get install -y samba </dev/null; }; "
         // — accepter le protocole NT1/SMB1 (appareils de mesure anciens) —
         "grep -q 'server min protocol' /etc/samba/smb.conf 2>/dev/null || "
           "sed -i '/^\\[global\\]/a server min protocol = NT1' /etc/samba/smb.conf; "
@@ -1458,13 +1461,20 @@ bool AppController::setupSharedFolder()
           "printf '\\n[Rufus]\\n   comment = Rufus\\n   path = %1/Rufus\\n"
           "   browseable = yes\\n   read only = no\\n   guest ok = yes\\n"
           "   create mask = 0755\\n   directory mask = 0755\\n' >> /etc/samba/smb.conf; "
+        // — utilisateur Samba = compte Ubuntu courant ; mot de passe lu sur
+        //   l'entrée standard (2 lignes : nouveau mdp + confirmation). Permet aux
+        //   postes Windows 10/11 (qui refusent l'invité) de se connecter. —
+        "smbpasswd -s -a '%2' >/dev/null 2>&1 || true; "
         "systemctl restart smbd 2>/dev/null || service smbd restart 2>/dev/null || true; "
         // — wsdd : découverte WSD pour que le partage apparaisse sous Windows —
         "dpkg -s wsdd >/dev/null 2>&1 || "
-          "{ apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y wsdd; }; "
+          "{ apt-get update </dev/null; DEBIAN_FRONTEND=noninteractive "
+          "apt-get install -y wsdd </dev/null; }; "
         "systemctl enable --now wsdd 2>/dev/null || true"
         ).arg(path, user);
-    runCmdElevated(script);
+    // Mot de passe Samba = mot de passe saisi dans le programme, transmis via
+    // l'entrée standard (jamais sur disque). smbpasswd -s attend 2 lignes.
+    runCmdElevated(script, m_password + "\n" + m_password + "\n");
     return QDir(path).exists();
 #else
     // Déjà partagé ? (lecture seule, aucune élévation)
@@ -1702,11 +1712,12 @@ QString AppController::runCmdFull(const QString& cmd, int timeoutMs)
     return p.readAllStandardOutput().trimmed();
 }
 
-bool AppController::runCmdElevated(const QString& cmd)
+bool AppController::runCmdElevated(const QString& cmd, const QString& stdinData)
 {
 #if defined(Q_OS_WIN)
     // L'application Windows tourne déjà en tant qu'administrateur (garde au
     // démarrage) : aucune élévation supplémentaire n'est nécessaire.
+    Q_UNUSED(stdinData);
     const QString out = runCmdFull(cmd);
     return !out.contains("Access is denied", Qt::CaseInsensitive)
         && !out.contains("denied",           Qt::CaseInsensitive);
@@ -1721,12 +1732,29 @@ bool AppController::runCmdElevated(const QString& cmd)
     s.close();
     runCmd("chmod +x '" + scriptPath + "'");
 
-    const QString out = runCmdFull("pkexec sh '" + scriptPath + "' 2>&1", 900000);
+    QString out;
+    if (stdinData.isEmpty()) {
+        out = runCmdFull("pkexec sh '" + scriptPath + "' 2>&1", 900000);
+    } else {
+        // stdinData transmis à l'entrée standard du processus élevé (jamais sur
+        // disque, ni en argument, ni dans les logs pkexec). pkexec relaie stdin
+        // au script, qui le passe à smbpasswd.
+        QProcess p;
+        p.setProcessChannelMode(QProcess::MergedChannels);
+        p.start("pkexec", QStringList{"sh", scriptPath});
+        if (p.waitForStarted(60000)) {
+            p.write(stdinData.toUtf8());
+            p.closeWriteChannel();
+            p.waitForFinished(900000);
+            out = QString::fromLocal8Bit(p.readAll());
+        }
+    }
     QFile::remove(scriptPath);
     return !out.contains("Authentication failed", Qt::CaseInsensitive)
         && !out.contains("not authorized",        Qt::CaseInsensitive)
         && !out.contains("dismissed",             Qt::CaseInsensitive);
 #else
+    Q_UNUSED(stdinData);
     // Exécute « cmd » avec les droits administrateur via une seule invite macOS.
     // La commande est déposée dans un script temporaire (évite tout enfer de
     // guillemets imbriqués osascript ▸ AppleScript ▸ shell).
