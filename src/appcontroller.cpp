@@ -987,8 +987,12 @@ bool AppController::initOracleDataDir()
         "  rm -rf \"$DATA\"\n"
         "  mkdir -p \"$DATA\"\n"
         "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
+        // TMPDIR hérité de la session pointe vers /var/folders/<user>/T (privé,
+        // inaccessible à _mysql → InnoDB échoue errno 13). On force /tmp (sticky,
+        // inscriptible par tous) pour l'environnement ET via --tmpdir.
+        "  export TMPDIR=/tmp\n"
         "  \"$PREFIX/bin/mysqld\" --no-defaults --initialize-insecure "
-        "--user=\"$OWNER\" --basedir=\"$PREFIX\" --datadir=\"$DATA\"\n"
+        "--user=\"$OWNER\" --basedir=\"$PREFIX\" --datadir=\"$DATA\" --tmpdir=/tmp\n"
         "  echo \"mysqld --initialize rc=$?\"\n"
         "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
         "} >> \"$LOG\" 2>&1\n"
