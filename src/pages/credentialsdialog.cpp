@@ -12,6 +12,7 @@
 #include <QEvent>
 #include <QKeyEvent>
 #include <QCloseEvent>
+#include <QShowEvent>
 
 // ── Traducteur partagé (géré par changeLanguage) ──────────────────────────────
 QTranslator* CredentialsDialog::s_translator = nullptr;
@@ -505,4 +506,17 @@ void CredentialsDialog::keyPressEvent(QKeyEvent* event)
 void CredentialsDialog::closeEvent(QCloseEvent* event)
 {
     event->ignore();
+}
+
+void CredentialsDialog::showEvent(QShowEvent* event)
+{
+    QDialog::showEvent(event);
+    // À chaque ouverture, le curseur doit être prêt dans le champ login — même si
+    // la fenêtre n'a pas (encore) le focus clavier. Le singleShot(0) réaffirme le
+    // focus APRÈS que le système de fenêtrage a fini d'afficher la boîte (sinon le
+    // focus par défaut, p. ex. la liste des langues, l'emporterait).
+    QTimer::singleShot(0, this, [this] {
+        m_login->setFocus(Qt::OtherFocusReason);
+        m_login->selectAll();
+    });
 }

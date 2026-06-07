@@ -37,6 +37,7 @@ protected:
     bool eventFilter(QObject* obj, QEvent* event) override;  // tooltip bouton désactivé
     void keyPressEvent(QKeyEvent* event) override;           // Entrée/Échap maîtrisés
     void closeEvent(QCloseEvent* event) override;            // bloque la croix / Alt+F4
+    void showEvent(QShowEvent* event) override;              // curseur d'emblée sur le login
 
 private slots:
     void onConfirmClicked();
