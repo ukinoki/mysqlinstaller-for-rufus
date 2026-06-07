@@ -1533,10 +1533,8 @@ bool AppController::prepareCreateModeLinux()
 
     // Indicateur d'activité pendant l'opération (apt Samba/wsdd, base, restart…).
     ProgressDialog* dlg = new ProgressDialog(
-        tr("Configuration du serveur en cours…\n"
-           "(base de données, dossier partagé, Samba)\n\n"
-           "Cette opération peut durer plusieurs minutes.\n"
-           "Merci de patienter, ne fermez pas la fenêtre."));
+        tr("Préparation du serveur…\n"
+           "Cela peut durer plusieurs minutes."));
     dlg->show();
     QApplication::processEvents();
 

@@ -134,11 +134,8 @@ Voulez-vous installer MySQL maintenant ?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Configuration du serveur en cours…
-(base de données, dossier partagé, Samba)
-
-Cette opération peut durer plusieurs minutes.
-Merci de patienter, ne fermez pas la fenêtre.</source>
+        <source>Préparation du serveur…
+Cela peut durer plusieurs minutes.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

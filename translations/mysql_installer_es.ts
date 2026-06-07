@@ -147,16 +147,10 @@ Voulez-vous installer MySQL maintenant ?</source>
 ¿Desea instalar MySQL ahora?</translation>
     </message>
     <message>
-        <source>Configuration du serveur en cours…
-(base de données, dossier partagé, Samba)
-
-Cette opération peut durer plusieurs minutes.
-Merci de patienter, ne fermez pas la fenêtre.</source>
-        <translation>Configurando el servidor…
-(base de datos, carpeta compartida, Samba)
-
-Esta operación puede tardar varios minutos.
-Espere y no cierre la ventana.</translation>
+        <source>Préparation du serveur…
+Cela peut durer plusieurs minutes.</source>
+        <translation>Preparando el servidor…
+Puede tardar varios minutos.</translation>
     </message>
     <message>
         <source>Mise à jour de MySQL nécessaire</source>
