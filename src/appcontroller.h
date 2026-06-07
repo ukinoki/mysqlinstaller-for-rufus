@@ -55,6 +55,9 @@ private:
     bool    installMySQL();
     bool    installFromDmg(const QString& dmgPath);
     QString downloadOracleDmg();
+    //  macOS : initialise /usr/local/mysql/data si le pkg Oracle ne l'a pas fait
+    //  (cas MySQL 8.4.x). root@localhost sans mot de passe. No-op si déjà fait.
+    bool    initOracleDataDir();
     //  Télécharge url -> dest avec barre de progression (vrai pourcentage).
     bool    downloadFile(const QString& url, const QString& dest,
                          const QString& label);

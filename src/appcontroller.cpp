@@ -926,6 +926,47 @@ bool AppController::installFromDmg(const QString& dmgPath)
     return isOracleInstall();
 }
 
+// Depuis MySQL 8.4.x, le pkg Oracle pour macOS n'initialise plus automatiquement
+// le répertoire de données : tant que /usr/local/mysql/data n'est pas initialisé,
+// mysqld refuse de démarrer (le panneau « Réglages Système ▸ MySQL » propose alors
+// de le faire à la main, avec invite de mot de passe). On l'initialise donc nous-
+// mêmes, en mode « insecure » → root@localhost SANS mot de passe, ce que
+// createUser() suppose. No-op si la base est déjà initialisée (mise à jour : on ne
+// touche pas aux données existantes).
+bool AppController::initOracleDataDir()
+{
+    const QString prefix = oraclePrefix();          // /usr/local/mysql (ou vide)
+    if (prefix.isEmpty())
+        return false;
+
+    const QString data = prefix + "/data";
+    // Déjà initialisé ? Le schéma système « mysql » est présent dans le datadir.
+    if (QFileInfo::exists(data + "/mysql"))
+        return true;
+
+    // Compte système exécutant mysqld : « _mysql » sur macOS (créé par le pkg) ;
+    // repli sur « mysql » si absent.
+    const QString owner =
+        runCmd("id -u _mysql >/dev/null 2>&1 && echo _mysql || echo mysql").trimmed();
+
+    // Script élevé (une seule invite admin via osascript). On prépare un datadir
+    // vide appartenant au compte mysql, puis on initialise sans mot de passe.
+    const QString script = QStringLiteral(
+        "PREFIX='%1'; DATA='%2'; OWNER='%3'\n"
+        "rm -rf \"$DATA\"\n"
+        "mkdir -p \"$DATA\"\n"
+        "chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
+        "\"$PREFIX/bin/mysqld\" --initialize-insecure "
+        "--user=\"$OWNER\" --basedir=\"$PREFIX\" --datadir=\"$DATA\"\n"
+        "chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n")
+        .arg(prefix, data, owner);
+
+    runCmdElevated(script);
+
+    // Succès = le schéma système a bien été créé.
+    return QFileInfo::exists(data + "/mysql");
+}
+
 bool AppController::installMySQL()
 {
 #if defined(Q_OS_WIN)
@@ -1128,7 +1169,18 @@ bool AppController::installMySQL()
 #else
     QString dmg = downloadOracleDmg();
     if (dmg.isEmpty()) return false;
-    return installFromDmg(dmg);
+    if (!installFromDmg(dmg)) return false;
+
+    // MySQL 8.4.x : le pkg n'initialise plus le datadir → on le fait nous-mêmes,
+    // sinon le serveur ne démarrera pas et createUser() échouera.
+    if (!initOracleDataDir()) {
+        QMessageBox::critical(nullptr, tr("Initialisation impossible"),
+            tr("MySQL est installé mais la base de données n'a pas pu être "
+               "initialisée (%1/data).\n\nLe serveur ne peut pas démarrer.")
+            .arg(oraclePrefix()));
+        return false;
+    }
+    return true;
 #endif
 }
 
@@ -1144,6 +1196,10 @@ bool AppController::startMySQL()
     runCmdElevated("systemctl start mysql");
 #else
     if (isOracleInstall()) {
+        // MySQL 8.4.x : le pkg Oracle n'initialise plus le datadir. Si la base
+        // n'est pas initialisée, mysqld ne démarrera jamais → on le fait d'abord
+        // (no-op si déjà initialisé : aucune invite, données existantes intactes).
+        initOracleDataDir();
         QString plist = "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist";
         if (QFile::exists(plist))
             runCmdFull(QString("launchctl load -w '%1' 2>&1").arg(plist), 15000);
