@@ -1405,9 +1405,8 @@ bool AppController::setupSharedFolder()
     auto alreadyConfigured = [&]() -> bool {
         if (!QDir(path + "/Rufus/Imagerie").exists())
             return false;
-        QFile aa("/etc/apparmor.d/local/usr.sbin.mysqld");
-        if (!aa.open(QIODevice::ReadOnly | QIODevice::Text)
-            || !QString::fromUtf8(aa.readAll()).contains(path + "/"))
+        // AppArmor : profil mysqld désactivé (lien dans disable/) ?
+        if (!QFileInfo("/etc/apparmor.d/disable/usr.sbin.mysqld").isSymLink())
             return false;
         QFile smb("/etc/samba/smb.conf");
         if (!smb.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -1428,7 +1427,7 @@ bool AppController::setupSharedFolder()
 
     // Sinon, tout le paramétrage privilégié en une seule élévation (pkexec) :
     //   • créer /Users/Shared/Rufus/Imagerie, droits 755, propriétaire = user ;
-    //   • AppArmor : autoriser mysqld à accéder au dossier ;
+    //   • AppArmor : désactiver le profil mysqld (lecture des images) ;
     //   • ouvrir le port 3306 (ufw) ;
     //   • installer Samba si besoin et partager le dossier sur le réseau ;
     //   • installer wsdd pour rendre le partage visible sous Windows 10/11.
@@ -1437,14 +1436,14 @@ bool AppController::setupSharedFolder()
         // Création de l'arborescence Rufus + droits (cf. procédure Rufus Linux) :
         // chmod -R 755 sur le dossier partagé, chown -R sur tout /Users.
         "mkdir -p '%1/Rufus/Imagerie'; chmod -R 755 '%1'; chown -R %2 /Users; "
-        // — AppArmor : ne pas bloquer mysqld sur le dossier partagé —
-        "mkdir -p /etc/apparmor.d/local; "
-        "touch /etc/apparmor.d/local/usr.sbin.mysqld; "
-        "grep -q '%1/' /etc/apparmor.d/local/usr.sbin.mysqld || "
-          "printf '%1/ r,\\n%1/** rwk,\\n' >> /etc/apparmor.d/local/usr.sbin.mysqld; "
-        "[ -f /etc/apparmor.d/usr.sbin.mysqld ] && "
-          "apparmor_parser -r /etc/apparmor.d/usr.sbin.mysqld; "
-        "systemctl reload apparmor 2>/dev/null || true; "
+        // — AppArmor : DÉSACTIVER le profil mysqld (sinon AppArmor bloque la
+        //   lecture des fichiers d'imagerie par MySQL). Conforme à la procédure
+        //   Rufus : lien dans disable/ + déchargement immédiat du profil. —
+        "mkdir -p /etc/apparmor.d/disable; "
+        "if [ -f /etc/apparmor.d/usr.sbin.mysqld ]; then "
+          "ln -sf /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/; "
+          "apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld 2>/dev/null || true; "
+        "fi; "
         // — pare-feu : ouvrir le port MySQL —
         "ufw allow 3306 || true; "
         // — Samba : installer si absent puis partager —

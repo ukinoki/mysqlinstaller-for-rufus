@@ -48,11 +48,14 @@ rm -rf /etc/mysql /var/lib/mysql /var/log/mysql /var/lib/mysql-files /var/lib/my
 echo "==> 2/7  Suppression du PATH (/etc/profile.d/mysql.sh)…"
 rm -f /etc/profile.d/mysql.sh
 
-echo "==> 3/7  Retrait des règles AppArmor pour $SHARED…"
+echo "==> 3/7  Réactivation d'AppArmor pour mysqld…"
+# Retire le lien qui désactivait le profil mysqld (approche actuelle).
+rm -f /etc/apparmor.d/disable/usr.sbin.mysqld
+# Compat. ancienne approche : retire d'éventuelles règles locales /Users/Shared.
 AA="/etc/apparmor.d/local/usr.sbin.mysqld"
 if [ -f "$AA" ]; then
-    sed -i "\#${SHARED}/#d" "$AA"           # retire les lignes /Users/Shared/...
-    [ -s "$AA" ] || rm -f "$AA"             # supprime le fichier s'il est vide
+    sed -i "\#${SHARED}/#d" "$AA"
+    [ -s "$AA" ] || rm -f "$AA"
 fi
 [ -f /etc/apparmor.d/usr.sbin.mysqld ] && \
     apparmor_parser -r /etc/apparmor.d/usr.sbin.mysqld 2>/dev/null
