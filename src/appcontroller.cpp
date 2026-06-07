@@ -1701,13 +1701,21 @@ QString AppController::writeCnfToTemp(const QList<QPair<QString, QString>>& vars
                 inMysqld = false;
             bool replaced = false;
             if (inMysqld) {
-                for (const auto& kv : vars) {
-                    if (trimmed.startsWith(kv.first + "=") ||
-                        trimmed.startsWith(kv.first + " ")) {
-                        lines << kv.first + " = " + kv.second;
-                        remaining.removeAll(kv.first);
-                        replaced = true;
-                        break;
+                // Repérage de la clé de la ligne : tout ce qui précède le premier
+                // « = », sans espaces, tirets normalisés en soulignés — pour
+                // reconnaître « bind-address⇥= 127.0.0.1 » (tabulations du défaut
+                // Ubuntu) aussi bien que « secure_file_priv=… ».
+                const int eq = trimmed.indexOf('=');
+                if (eq > 0) {
+                    const QString lineKey =
+                        trimmed.left(eq).trimmed().replace('-', '_');
+                    for (const auto& kv : vars) {
+                        if (lineKey == QString(kv.first).replace('-', '_')) {
+                            lines << kv.first + " = " + kv.second;
+                            remaining.removeAll(kv.first);
+                            replaced = true;
+                            break;
+                        }
                     }
                 }
             }
