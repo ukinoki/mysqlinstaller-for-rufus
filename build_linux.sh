@@ -75,9 +75,19 @@ cp "$ROOT/resources/mysqlinstaller.png" \
 
 # --- 4. Outils linuxdeploy (PATH ou téléchargement) --------------------------
 TOOLS="$BUILD/tools"; mkdir -p "$TOOLS"
+download() {  # <url> <dest> — via curl ou wget (selon ce qui est présent)
+    if command -v curl >/dev/null 2>&1; then
+        curl -fSL -o "$2" "$1"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -O "$2" "$1"
+    else
+        echo "ERREUR : ni curl ni wget. Installez-en un : sudo apt install curl" >&2
+        exit 1
+    fi
+}
 fetch() {  # <url> <dest>
     [ -x "$2" ] || { echo "-> téléchargement $(basename "$2")…"; \
-        curl -fSL -o "$2" "$1"; chmod +x "$2"; }
+        download "$1" "$2"; chmod +x "$2"; }
 }
 if command -v linuxdeploy >/dev/null 2>&1; then
     LD="$(command -v linuxdeploy)"
