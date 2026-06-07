@@ -12,6 +12,7 @@
 #include <QProcess>
 #include <QEventLoop>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -86,6 +87,25 @@ static inline void startShellProcess(QProcess& p, const QString& cmd)
 #else
     p.start(shellProgram(), shellArgs(cmd));
 #endif
+}
+
+//  Attend la fin de « p » SANS geler l'interface : on laisse Qt rafraîchir la
+//  fenêtre (événements de peinture uniquement, pas les clics → aucune réentrance)
+//  pendant que la commande tourne. Évite le « (l'application ne répond pas) ».
+static void waitProcessResponsive(QProcess& p, int timeoutMs)
+{
+    QElapsedTimer t;
+    t.start();
+    while (p.state() != QProcess::NotRunning) {
+        if (p.waitForFinished(50))
+            break;
+        if (timeoutMs > 0 && t.elapsed() > timeoutMs) {
+            p.kill();
+            p.waitForFinished(2000);
+            break;
+        }
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 40);
+    }
 }
 
 //  Compare deux numéros de version « pointés » (ex. « 8.4.8 » vs « 8.4.3 »).
@@ -1061,9 +1081,8 @@ bool AppController::installMySQL()
 
 bool AppController::startMySQL()
 {
-    QString bin = mysqlBin("mysqladmin");
-    if (runCmdFull(QString("\"%1\" -u root ping ").arg(bin) + NUL())
-            .contains("mysqld is alive"))
+    // Déjà démarré ? (isServerRunning gère le cas auth_socket d'Ubuntu.)
+    if (isServerRunning())
         return true;
 
 #if defined(Q_OS_WIN)
@@ -1086,9 +1105,7 @@ bool AppController::startMySQL()
 
 void AppController::stopMySQL()
 {
-    QString bin = mysqlBin("mysqladmin");
-    if (!runCmdFull(QString("\"%1\" -u root ping ").arg(bin) + NUL())
-             .contains("mysqld is alive"))
+    if (!isServerRunning())   // gère le cas auth_socket d'Ubuntu
         return;
 #if defined(Q_OS_WIN)
     runCmdElevated("net stop MySQL");
@@ -1112,13 +1129,14 @@ void AppController::stopMySQL()
 
 bool AppController::waitForMySQL(int maxSeconds)
 {
-    QString bin = mysqlBin("mysqladmin");
+    // isServerRunning() considère « Access denied » comme la preuve que le serveur
+    // répond (indispensable sous Ubuntu où root@localhost = auth_socket : un test
+    // « mysqladmin -u root ping » échouerait et bouclerait jusqu'au timeout).
     for (int i = 0; i < maxSeconds; i++) {
         QEventLoop loop;
         QTimer::singleShot(1000, &loop, &QEventLoop::quit);
         loop.exec();
-        if (runCmdFull(QString("\"%1\" -u root ping ").arg(bin) + NUL())
-                .contains("mysqld is alive"))
+        if (isServerRunning())
             return true;
     }
     return false;
@@ -1416,7 +1434,7 @@ bool AppController::createUser()
         return false;
     p.write(sql.toUtf8());
     p.closeWriteChannel();
-    p.waitForFinished(60000);
+    waitProcessResponsive(p, 60000);
     const QString out = QString::fromLocal8Bit(p.readAll());
     return !out.contains("ERROR", Qt::CaseInsensitive)
         && !out.contains("not authorized", Qt::CaseInsensitive)
@@ -1743,7 +1761,7 @@ QString AppController::runCmd(const QString& cmd, int timeoutMs)
 {
     QProcess p;
     startShellProcess(p, cmd);
-    p.waitForFinished(timeoutMs);
+    waitProcessResponsive(p, timeoutMs);
     return p.readAllStandardOutput().trimmed();
 }
 
@@ -1752,7 +1770,7 @@ QString AppController::runCmdFull(const QString& cmd, int timeoutMs)
     QProcess p;
     p.setProcessChannelMode(QProcess::MergedChannels);
     startShellProcess(p, cmd);
-    p.waitForFinished(timeoutMs);
+    waitProcessResponsive(p, timeoutMs);
     return p.readAllStandardOutput().trimmed();
 }
 
@@ -1789,7 +1807,7 @@ bool AppController::runCmdElevated(const QString& cmd, const QString& stdinData)
         if (p.waitForStarted(60000)) {
             p.write(stdinData.toUtf8());
             p.closeWriteChannel();
-            p.waitForFinished(900000);
+            waitProcessResponsive(p, 900000);
             out = QString::fromLocal8Bit(p.readAll());
         }
     }
