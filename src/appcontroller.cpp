@@ -1193,7 +1193,7 @@ void AppController::restartMySQL()
 //   • bind-address = * sous Linux (apt met 127.0.0.1 → accès distant bloqué).
 //  (Pas de character-set : MySQL est déjà en utf8mb4 par défaut — utile seulement
 //   sous MariaDB.)
-QList<QPair<QString, QString>> AppController::rufusCnfVars() const
+QList<QPair<QString, QString>> AppController::rufusCnfVars()
 {
     QList<QPair<QString, QString>> vars = {
         qMakePair(QStringLiteral("secure_file_priv"), sharedFolderPath()),

@@ -92,7 +92,7 @@ private:
 #endif
     //  Variables [mysqld] requises par Rufus (secure_file_priv, sql_mode, +
     //  bind-address sous Linux). Source unique pour my.cnf.
-    QList<QPair<QString, QString>> rufusCnfVars() const;
+    QList<QPair<QString, QString>> rufusCnfVars();
     QString getCnfVar(const QString& key);
     //  Prépare une copie de my.cnf avec une ou plusieurs paires clé=valeur
     //  (section [mysqld]) dans un fichier temporaire, SANS élévation. Renvoie le
