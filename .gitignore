@@ -27,3 +27,7 @@ ui_*.h
 
 # Installeur généré (artefact de build)
 dist/
+
+# Build Linux (linuxdeployqt / AppImage)
+build-linux/
+*.AppImage

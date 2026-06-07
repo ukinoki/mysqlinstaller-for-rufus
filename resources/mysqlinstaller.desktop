@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=MySQL Installer for Rufus
+GenericName=Configuration du serveur MySQL pour Rufus
+Comment=Installe et configure MySQL pour le logiciel médical Rufus
+Exec=MySQLInstaller
+Icon=mysqlinstaller
+Terminal=false
+Categories=System;Utility;Database;
+Keywords=MySQL;Rufus;serveur;database;
