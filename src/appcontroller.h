@@ -95,6 +95,13 @@ private:
     //  réutilisé par setupSharedFolder() et prepareCreateModeLinux().
     QString linuxFolderSambaScript(const QString& path, const QString& user) const;
 #endif
+#if defined(Q_OS_MACOS)
+    //  Regroupe TOUT le paramétrage root du mode Create en une seule invite admin
+    //  (my.cnf + /etc/paths.d + dossier/partage SMB + redémarrage du serveur), pour
+    //  ne demander le mot de passe administrateur qu'une fois. La création de
+    //  l'utilisateur reste séparée (mysql -u root n'exige pas root sur macOS).
+    bool    prepareCreateModeMacOS();
+#endif
     //  Variables [mysqld] requises par Rufus (secure_file_priv, sql_mode, +
     //  bind-address sous Linux). Source unique pour my.cnf.
     QList<QPair<QString, QString>> rufusCnfVars();

@@ -563,6 +563,17 @@ void AppController::onCredentialsAccepted()
 
     if (!isServerRunning()) startMySQL();
 
+#if defined(Q_OS_MACOS)
+    // macOS, installation neuve : regrouper TOUT le paramétrage root (my.cnf,
+    // /etc/paths.d, dossier + partage SMB, redémarrage) en UNE seule invite admin,
+    // AVANT les étapes ci-dessous qui, sinon, élèveraient chacune séparément. Après
+    // cet appel, ensureMysqlInPath/setupSharedFolder/ensureSecureFilePriv ne font
+    // plus que vérifier l'état (aucune nouvelle invite). createUser() suit, le
+    // serveur étant redémarré.
+    if (m_freshInstall)
+        prepareCreateModeMacOS();
+#endif
+
     // ── Étape 2 : le chemin de mysql est dans la variable d'environnement PATH ─
     if (!ensureMysqlInPath()) {
         m_dialog->setError(
@@ -1744,6 +1755,75 @@ QString AppController::linuxFolderSambaScript(const QString& path,
         // — wsdd : activer le service (déjà installé ci-dessus) —
         "systemctl enable --now wsdd 2>/dev/null || true"
         ).arg(path, user);
+}
+#endif
+
+#if defined(Q_OS_MACOS)
+//  Mode Create (macOS) : exécute TOUT le paramétrage root en UNE SEULE invite
+//  administrateur (osascript), à l'image de prepareCreateModeLinux pour pkexec :
+//    1. my.cnf (secure_file_priv, sql_mode) → /etc/my.cnf ;
+//    2. chemin de mysql → /etc/paths.d/mysql (persistance du PATH) ;
+//    3. dossier /Users/Shared/Rufus + activation et déclaration du partage SMB ;
+//    4. (re)démarrage du serveur pour appliquer my.cnf.
+//  La création de l'utilisateur reste séparée (mysql -u root n'exige pas root sur
+//  macOS) et a lieu APRÈS, le serveur étant alors redémarré. Best-effort : en cas
+//  d'échec partiel, les étapes individuelles (qui vérifient l'état) reprennent ce
+//  qui manquerait — au pire une invite supplémentaire, jamais de blocage.
+bool AppController::prepareCreateModeMacOS()
+{
+    const QString path = sharedFolderPath();            // /Users/Shared
+    QDir().mkpath(path + "/Rufus/Imagerie");
+
+    // my.cnf préparé hors élévation (mêmes variables que ensureSecureFilePriv).
+    const QString cnfTmp = writeCnfToTemp(rufusCnfVars());
+    const QString cnfDst = getCnfPath();                 // /etc/my.cnf (Oracle)
+    if (cnfTmp.isEmpty())
+        return false;
+
+    // Chemin du binaire mysql → fichier temporaire copié ensuite dans /etc/paths.d.
+    QString mysqlPath = mysqlBin("mysql");
+    if (!QDir::isAbsolutePath(mysqlPath))
+        mysqlPath = runCmd("command -v mysql " + NUL()).trimmed();
+    const QString binDir  = QFileInfo(mysqlPath).absolutePath();
+    const QString pathTmp = QDir::tempPath() + "/mysql.path";
+    { QFile f(pathTmp);
+      if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+          QTextStream ts(&f); ts << binDir << '\n';
+      } }
+
+    // (Re)démarrage du serveur : démon launchd si présent (persiste au reboot),
+    // sinon mysql.server (TMPDIR=/tmp pour éviter l'errno 13 d'InnoDB).
+    const QString plist = "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist";
+    const QString restart = QFile::exists(plist)
+        ? QString("launchctl unload '%1' 2>/dev/null; launchctl load -w '%1'").arg(plist)
+        : QString("TMPDIR=/tmp '%1/support-files/mysql.server' restart").arg(oraclePrefix());
+
+    const QString script = QString(
+        "cp '%1' '%2' && chmod 644 '%2'\n"                                   // my.cnf
+        "cp '%3' /etc/paths.d/mysql && chmod 644 /etc/paths.d/mysql\n"       // PATH
+        "mkdir -p '%4/Rufus/Imagerie'; chmod -R 755 '%4/Rufus'\n"            // dossier
+        // Partage SMB de /Users/Shared (lecture/écriture invité), pour Windows.
+        "launchctl enable system/com.apple.smbd 2>/dev/null; "
+        "launchctl kickstart -k system/com.apple.smbd 2>/dev/null; "
+        "sharing -a '%4' -n 'Partagé' -s 001 -g 000 2>/dev/null; "
+        "launchctl kickstart -k system/com.apple.smbd 2>/dev/null\n"
+        "%5\n")                                                             // restart
+        .arg(cnfTmp, cnfDst, pathTmp, path, restart);
+
+    ProgressDialog* dlg = new ProgressDialog(
+        tr("Préparation du serveur…\n"
+           "Cela peut durer un moment."));
+    dlg->show();
+    QApplication::processEvents();
+
+    const bool ok = runCmdElevated(script);
+    QFile::remove(cnfTmp);
+    QFile::remove(pathTmp);
+    waitForMySQL(20);                 // le serveur vient d'être redémarré
+
+    dlg->close();
+    delete dlg;
+    return ok;
 }
 #endif
 
