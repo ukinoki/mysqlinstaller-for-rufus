@@ -30,6 +30,7 @@ echo "  • retirer le PATH /etc/profile.d/mysql.sh"
 echo "  • retirer les règles AppArmor pour $SHARED"
 echo "  • retirer la règle ufw 'allow $PORT'"
 echo "  • retirer le partage Samba [Shared] et purger samba"
+echo "  • désinstaller wsdd (découverte réseau Windows)"
 echo "  • supprimer le dossier $SHARED"
 echo
 read -r -p "Confirmer ? Tapez 'oui' : " ans
@@ -60,7 +61,7 @@ systemctl reload apparmor 2>/dev/null || true
 echo "==> 4/7  Retrait de la règle ufw (allow $PORT)…"
 ufw delete allow "$PORT" 2>/dev/null || true
 
-echo "==> 5/7  Retrait du partage Samba [Shared] et purge de samba…"
+echo "==> 5/7  Retrait du partage Samba [Shared], purge de samba et de wsdd…"
 # Retire d'abord proprement la section [Shared] (au cas où samba serait conservé).
 SMB="/etc/samba/smb.conf"
 if [ -f "$SMB" ]; then
@@ -69,7 +70,9 @@ if [ -f "$SMB" ]; then
     sed -i '/^\[Shared\]/,/^\[/ { /^\[Shared\]/d; /^\[/!d }' "$SMB"
 fi
 systemctl stop smbd nmbd 2>/dev/null
-DEBIAN_FRONTEND=noninteractive apt-get purge -y 'samba.*' 'samba-common.*' 2>/dev/null
+# wsdd : démon de découverte WSD (rend le partage visible depuis Windows 10/11).
+systemctl stop wsdd 2>/dev/null
+DEBIAN_FRONTEND=noninteractive apt-get purge -y 'samba.*' 'samba-common.*' wsdd 2>/dev/null
 DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge 2>/dev/null
 rm -rf /etc/samba
 
