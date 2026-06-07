@@ -108,6 +108,20 @@ static void waitProcessResponsive(QProcess& p, int timeoutMs)
     }
 }
 
+//  [Diagnostic] Journalise une étape dans /tmp/rufus_steps.log (Linux). Sert à
+//  comprendre quelle vérification « déjà fait ? » échoue et provoque une
+//  ré-élévation (invite pkexec). À retirer une fois le mode Create stabilisé.
+static void logStep(const QString& msg)
+{
+#if defined(Q_OS_LINUX)
+    QFile f("/tmp/rufus_steps.log");
+    if (f.open(QIODevice::Append | QIODevice::Text))
+        QTextStream(&f) << msg << '\n';
+#else
+    Q_UNUSED(msg);
+#endif
+}
+
 //  Compare deux numéros de version « pointés » (ex. « 8.4.8 » vs « 8.4.3 »).
 //  Renvoie true si « ver » est supérieur OU égal à « minVer », composant par
 //  composant. Une version vide/inconnue est considérée comme inférieure.
@@ -468,8 +482,11 @@ void AppController::run()
             if (!isServerRunning()) startMySQL();
         } else {
             // Version trop ancienne : dialogue de MAJ nécessaire, avec conseil de
-            // sauvegarde. Un clic sur OK fait passer le programme en mode Create
-            // (la MAJ réinstalle MySQL et peut réinitialiser la base).
+            // sauvegarde. Un clic sur OK fait passer le programme en mode Create.
+            // On bascule la fiche en mode Create AVANT la boîte de dialogue : la
+            // transition se fait cachée derrière la boîte modale (pas de
+            // scintillement à sa fermeture).
+            m_dialog->setMode(CredentialsDialog::Mode::Create);
             if (!askUpdateConfirmation(ver, cfg.version)) {
                 qApp->quit(); return;
             }
@@ -477,6 +494,9 @@ void AppController::run()
         }
     } else {
         // ── MySQL absent : demander la permission d'installer ─────────────────
+        // Bascule en mode Create AVANT la boîte (transition masquée par la boîte
+        // modale → pas de scintillement).
+        m_dialog->setMode(CredentialsDialog::Mode::Create);
         if (!askYesNo(tr("Installation de MySQL"),
                 tr("MySQL n'est pas installé sur cet ordinateur.\n\n"
                    "Voulez-vous l'installer maintenant (version %1) ?").arg(cfg.version))) {
@@ -486,12 +506,7 @@ void AppController::run()
     }
 
     if (needInstall) {
-        // Bascule en mode Create DÈS l'acceptation (avant le téléchargement) et
-        // rafraîchissement immédiat de la fiche, pour que l'utilisateur voie tout
-        // de suite le passage en mode « Créer un compte » pendant l'installation.
-        m_dialog->setMode(CredentialsDialog::Mode::Create);
-        QApplication::processEvents();
-
+        // (La fiche est déjà en mode Create — voir ci-dessus.)
         // Pré-requis réseau : sans accès WAN ou si le lien de téléchargement ne
         // se résout pas, l'installation est impossible. checkDownloadConnectivity()
         // affiche le message adéquat.
@@ -535,6 +550,7 @@ void AppController::run()
 // ═════════════════════════════════════════════════════════════════════════════
 void AppController::onCredentialsAccepted()
 {
+    QFile::remove("/tmp/rufus_steps.log");   // [diagnostic] journal d'étapes neuf
     m_login    = m_dialog->login();
     m_password = m_dialog->password();
     m_dialog->uncheckAllSteps();
@@ -1212,7 +1228,14 @@ bool AppController::ensureSecureFilePriv()
     // Déjà toutes configurées ? → aucune élévation.
     bool allOk = true;
     for (const auto& kv : vars)
-        if (getCnfVar(kv.first) != kv.second) { allOk = false; break; }
+        if (getCnfVar(kv.first) != kv.second) {
+            allOk = false;
+            logStep(QString("ensureSecureFilePriv: FAIL %1 lu='%2' attendu='%3'")
+                    .arg(kv.first, getCnfVar(kv.first), kv.second));
+            break;
+        }
+    logStep(QString("ensureSecureFilePriv: allOk=%1")
+            .arg(allOk ? "OK (skip)" : "FAIL (élève)"));
     if (allOk)
         return true;
 
@@ -1436,7 +1459,9 @@ bool AppController::createUser()
 #if defined(Q_OS_LINUX)
     // Déjà créé (ex. par prepareCreateModeLinux) ? On court-circuite pour ne pas
     // redemander le mot de passe système.
-    if (tryConnect())
+    const bool already = tryConnect();
+    logStep(QString("createUser: tryConnect=%1").arg(already ? "OK (skip)" : "FAIL (élève)"));
+    if (already)
         return true;
 #endif
 
@@ -1598,27 +1623,30 @@ bool AppController::setupSharedFolder()
     // paramétrée pour Rufus, où l'on ne veut PAS redemander le mot de passe.
     auto alreadyConfigured = [&]() -> bool {
         if (!QDir(path + "/Rufus/Imagerie").exists())
-            return false;
+            { logStep("  setup: FAIL dossier Rufus/Imagerie manquant"); return false; }
         // AppArmor : si un profil mysqld EXISTE, il doit être neutralisé (lien
         // dans disable/). S'il n'y a pas de profil, il n'y a rien à désactiver.
         if (QFileInfo::exists("/etc/apparmor.d/usr.sbin.mysqld")
             && !QFileInfo("/etc/apparmor.d/disable/usr.sbin.mysqld").isSymLink())
-            return false;
+            { logStep("  setup: FAIL AppArmor non désactivé"); return false; }
         QFile smb("/etc/samba/smb.conf");
         if (!smb.open(QIODevice::ReadOnly | QIODevice::Text))
-            return false;
+            { logStep("  setup: FAIL smb.conf illisible"); return false; }
         const QString smbContent = QString::fromUtf8(smb.readAll());
         if (!smbContent.contains("[Rufus]"))
-            return false;
+            { logStep("  setup: FAIL [Rufus] absent de smb.conf"); return false; }
         // Protocole NT1 accepté (certains appareils de mesure ne parlent que SMB1) ?
         if (!smbContent.contains("NT1"))
-            return false;
+            { logStep("  setup: FAIL NT1 absent de smb.conf"); return false; }
         // wsdd installé (découverte du partage depuis l'explorateur Windows) ?
         if (!runCmd("dpkg -s wsdd 2>/dev/null").contains("Status: install ok"))
-            return false;
+            { logStep("  setup: FAIL wsdd non installé"); return false; }
         return true;
     };
-    if (alreadyConfigured())
+    const bool already = alreadyConfigured();
+    logStep(QString("setupSharedFolder: alreadyConfigured=%1")
+            .arg(already ? "OK (skip)" : "FAIL (élève)"));
+    if (already)
         return true;
 
     // Sinon, tout le paramétrage privilégié en une seule élévation (pkexec). Le
