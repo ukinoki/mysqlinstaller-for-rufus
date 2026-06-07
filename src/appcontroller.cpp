@@ -1030,11 +1030,27 @@ bool AppController::installMySQL()
     registerWindowsUninstaller(base, progData, version);
     return true;
 #elif defined(Q_OS_LINUX)
-    // Installation via apt-get (droits root → pkexec, avec dialogue de progression).
-    runLongOp(
-        "pkexec sh -c 'apt-get update && DEBIAN_FRONTEND=noninteractive "
-        "apt-get install -y mysql-server'",
-        tr("Installation de MySQL via apt-get…"), 900000);
+    // Installation via apt-get (droits root → pkexec), avec barre de progression
+    // RÉELLE : apt écrit son avancement (0-100) sur APT::Status-Fd ; un awk le
+    // convertit en lignes « PROGRESS <pct> 100 » lues par runLongOpProgress().
+    // On passe par un script temporaire pour éviter l'enfer des guillemets.
+    const QString aptScript = QDir::tempPath() + "/mysql_apt_install.sh";
+    {
+        QFile f(aptScript);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream ts(&f);
+            ts << "#!/bin/sh\n"
+               << "apt-get update >/dev/null 2>&1\n"
+               << "DEBIAN_FRONTEND=noninteractive apt-get -o APT::Status-Fd=1 "
+                  "install -y mysql-server 2>/dev/null | "
+                  "awk -F: '/^(pmstatus|dlstatus)/ "
+                  "{ printf \"PROGRESS %d 100\\n\", $3; fflush() }'\n";
+            f.close();
+        }
+    }
+    runLongOpProgress("pkexec sh '" + aptScript + "'",
+                      tr("Installation de MySQL via apt-get…"), 900000);
+    QFile::remove(aptScript);
     return isMySQLInstalled();
 #else
     QString dmg = downloadOracleDmg();
@@ -1383,13 +1399,33 @@ bool AppController::checkPrivileges(QStringList& outMissing)
 
 bool AppController::createUser()
 {
-    QString sql = QString(
+    const QString sql = QString(
         "CREATE USER IF NOT EXISTS '%1'@'localhost' IDENTIFIED BY '%2';"
         "GRANT ALL PRIVILEGES ON *.* TO '%1'@'localhost' WITH GRANT OPTION;"
-        "FLUSH PRIVILEGES;").arg(m_login, m_password);
-    QString out = runCmdFull(
+        "FLUSH PRIVILEGES;\n").arg(m_login, m_password);
+
+#if defined(Q_OS_LINUX)
+    // Sur Ubuntu, root@localhost utilise auth_socket : « mysql -u root » ne
+    // fonctionne QUE lancé en tant que root. On exécute donc mysql via pkexec, et
+    // on transmet le SQL (qui contient le mot de passe) par l'ENTRÉE STANDARD —
+    // jamais sur disque, ni en argument, ni dans les logs pkexec.
+    QProcess p;
+    p.setProcessChannelMode(QProcess::MergedChannels);
+    p.start("pkexec", QStringList{ mysqlBin("mysql"), "-u", "root" });
+    if (!p.waitForStarted(60000))
+        return false;
+    p.write(sql.toUtf8());
+    p.closeWriteChannel();
+    p.waitForFinished(60000);
+    const QString out = QString::fromLocal8Bit(p.readAll());
+    return !out.contains("ERROR", Qt::CaseInsensitive)
+        && !out.contains("not authorized", Qt::CaseInsensitive)
+        && !out.contains("dismissed",      Qt::CaseInsensitive);
+#else
+    const QString out = runCmdFull(
         QString("\"%1\" -u root -e \"%2\" 2>&1").arg(mysqlBin("mysql"), sql));
     return !out.contains("ERROR", Qt::CaseInsensitive);
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
