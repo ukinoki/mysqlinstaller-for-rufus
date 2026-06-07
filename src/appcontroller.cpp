@@ -940,8 +940,9 @@ bool AppController::initOracleDataDir()
         return false;
 
     const QString data = prefix + "/data";
-    // Déjà initialisé ? Le schéma système « mysql » est présent dans le datadir.
-    if (QFileInfo::exists(data + "/mysql"))
+    // Déjà initialisé ? mysql.ibd (dictionnaire de données InnoDB) est présent dès
+    // l'initialisation en MySQL 8.x.
+    if (QFileInfo::exists(data + "/mysql.ibd"))
         return true;
 
     // Compte système exécutant mysqld : « _mysql » sur macOS (créé par le pkg) ;
@@ -951,20 +952,28 @@ bool AppController::initOracleDataDir()
 
     // Script élevé (une seule invite admin via osascript). On prépare un datadir
     // vide appartenant au compte mysql, puis on initialise sans mot de passe.
+    //  - --no-defaults : ignore tout /etc/my.cnf résiduel qui ferait échouer l'init.
+    //  - toute la sortie est journalisée dans m_initLog pour diagnostic.
     const QString script = QStringLiteral(
-        "PREFIX='%1'; DATA='%2'; OWNER='%3'\n"
-        "rm -rf \"$DATA\"\n"
-        "mkdir -p \"$DATA\"\n"
-        "chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
-        "\"$PREFIX/bin/mysqld\" --initialize-insecure "
+        "PREFIX='%1'; DATA='%2'; OWNER='%3'; LOG='%4'\n"
+        "{\n"
+        "  echo \"== init datadir (owner=$OWNER) ==\"\n"
+        "  id \"$OWNER\" || echo \"(compte $OWNER introuvable)\"\n"
+        "  rm -rf \"$DATA\"\n"
+        "  mkdir -p \"$DATA\"\n"
+        "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
+        "  \"$PREFIX/bin/mysqld\" --no-defaults --initialize-insecure "
         "--user=\"$OWNER\" --basedir=\"$PREFIX\" --datadir=\"$DATA\"\n"
-        "chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n")
-        .arg(prefix, data, owner);
+        "  echo \"mysqld --initialize rc=$?\"\n"
+        "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
+        "} > \"$LOG\" 2>&1\n"
+        "chmod 644 \"$LOG\" 2>/dev/null\n")
+        .arg(prefix, data, owner, m_initLog);
 
     runCmdElevated(script);
 
-    // Succès = le schéma système a bien été créé.
-    return QFileInfo::exists(data + "/mysql");
+    // Succès = le dictionnaire de données a bien été créé.
+    return QFileInfo::exists(data + "/mysql.ibd");
 }
 
 bool AppController::installMySQL()
@@ -1174,10 +1183,18 @@ bool AppController::installMySQL()
     // MySQL 8.4.x : le pkg n'initialise plus le datadir → on le fait nous-mêmes,
     // sinon le serveur ne démarrera pas et createUser() échouera.
     if (!initOracleDataDir()) {
+        // Joindre la fin du journal mysqld pour rendre la cause diagnosticable.
+        QString detail;
+        QFile lf(m_initLog);
+        if (lf.open(QIODevice::ReadOnly | QIODevice::Text))
+            detail = QString::fromLocal8Bit(lf.readAll()).trimmed();
         QMessageBox::critical(nullptr, tr("Initialisation impossible"),
             tr("MySQL est installé mais la base de données n'a pas pu être "
-               "initialisée (%1/data).\n\nLe serveur ne peut pas démarrer.")
-            .arg(oraclePrefix()));
+               "initialisée (%1/data).\n\nLe serveur ne peut pas démarrer.\n\n"
+               "Détail (%2) :\n%3")
+            .arg(oraclePrefix(), m_initLog,
+                 detail.isEmpty() ? tr("(journal indisponible)")
+                                  : detail.right(1500)));
         return false;
     }
     return true;

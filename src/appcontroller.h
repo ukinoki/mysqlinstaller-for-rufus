@@ -28,6 +28,8 @@ private:
     QString             m_brewPrefix;
     CredentialsDialog*  m_dialog  = nullptr;
     bool                m_freshInstall = false;  // true = MySQL vient d'être installé
+    // macOS : journal de mysqld --initialize (diagnostic si l'init du datadir échoue).
+    QString             m_initLog = "/tmp/rufus_mysql_init.log";
     MySQLRemoteConfig   m_remoteConfig;          // config distante (chargée une seule fois)
     bool                m_remoteConfigLoaded = false;
 
