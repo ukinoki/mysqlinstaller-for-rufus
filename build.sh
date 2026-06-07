@@ -16,7 +16,10 @@ echo "╚═══════════════════════�
 echo ""
 
 # Détecter Qt
-if command -v qmake6 &>/dev/null; then
+if [ -n "$QT_DIR" ] && [ -x "$QT_DIR/bin/qmake" ]; then
+    # Chemin fourni explicitement (ex. export QT_DIR=/Users/serge/Qt/6.11.1/macos)
+    QMAKE="$QT_DIR/bin/qmake"
+elif command -v qmake6 &>/dev/null; then
     QMAKE="qmake6"
 elif command -v qmake &>/dev/null; then
     QMAKE="qmake"
@@ -26,10 +29,18 @@ else
     if [ -n "$QT_HOMEBREW" ] && [ -f "$QT_HOMEBREW/bin/qmake" ]; then
         QMAKE="$QT_HOMEBREW/bin/qmake"
     else
-        echo "❌ Qt introuvable. Installez Qt :"
-        echo "   brew install qt"
-        echo "   ou téléchargez depuis https://www.qt.io/download"
-        exit 1
+        # Chercher une installation officielle qt.io dans ~/Qt (la plus récente),
+        # sous-dossier « macos » sur Apple. Ex. ~/Qt/6.11.1/macos/bin/qmake
+        QMAKE=$(ls -d "$HOME"/Qt/*/macos/bin/qmake 2>/dev/null | sort -V | tail -1)
+        if [ -z "$QMAKE" ] || [ ! -x "$QMAKE" ]; then
+            echo "❌ Qt introuvable. Installez Qt :"
+            echo "   brew install qt"
+            echo "   ou téléchargez depuis https://www.qt.io/download"
+            echo ""
+            echo "Si Qt est déjà installé via qt.io, indiquez son chemin, ex. :"
+            echo "   export QT_DIR=\"\$HOME/Qt/6.11.1/macos\""
+            exit 1
+        fi
     fi
 fi
 
