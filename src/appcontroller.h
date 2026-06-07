@@ -57,6 +57,9 @@ private:
     //  Télécharge url -> dest avec barre de progression (vrai pourcentage).
     bool    downloadFile(const QString& url, const QString& dest,
                          const QString& label);
+    //  Accès réseau (WAN) présent ? Connexion TCP vers une IP publique, sans
+    //  message (l'appelant décide quoi afficher). Contrôlé au lancement.
+    bool    hasNetworkAccess();
     //  Pré-requis réseau avant un téléchargement d'installation. Affiche un
     //  message d'erreur explicite et renvoie false si : aucun accès réseau (WAN),
     //  ou WAN présent mais le lien de téléchargement ne se résout pas (DNS).

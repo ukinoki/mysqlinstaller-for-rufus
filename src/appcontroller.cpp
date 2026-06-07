@@ -400,6 +400,20 @@ void AppController::run()
     }
 #endif
 
+    // ── Accès réseau requis pour tout le programme ────────────────────────────
+    //  Le programme a besoin d'Internet dès le lancement : pour lire la config
+    //  distante (version cible, seuil minimal) en mode Verify comme en mode
+    //  Create, et pour télécharger MySQL le cas échéant. On vérifie donc l'accès
+    //  réseau (WAN) AVANT toute la suite ; la résolution du lien de
+    //  téléchargement, elle, reste contrôlée juste avant l'installation.
+    if (!hasNetworkAccess()) {
+        QMessageBox::critical(nullptr, tr("Pas d'accès réseau"),
+            tr("Absence d'accès réseau. Le programme a besoin d'une connexion "
+               "Internet pour fonctionner.\n\nFermeture du programme."));
+        qApp->quit();
+        return;
+    }
+
     // ── Fenêtre affichée AVANT le contrôle de MySQL ───────────────────────────
     //  La fiche s'ouvre immédiatement en mode Verify, case « MySQL » décochée et
     //  saisie verrouillée. La détection (puis l'éventuelle installation) se fait
@@ -1750,31 +1764,37 @@ bool AppController::downloadFile(const QString& url, const QString& dest,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Pré-requis réseau avant un téléchargement d'installation MySQL.
-//   1. Accès réseau (WAN) : on tente une connexion TCP directe vers une IP
-//      publique fiable (résolveurs Cloudflare/Google), SANS passer par le DNS,
-//      afin d'isoler le diagnostic « pas de réseau » de « DNS qui échoue ».
-//   2. Résolution du lien : on résout l'hôte de l'URL de téléchargement (DNS).
+//  Accès réseau (WAN) : connexion TCP/443 vers une IP publique fiable
+//  (résolveurs Cloudflare/Google), SANS passer par le DNS, afin d'isoler le
+//  diagnostic « pas de réseau » de « DNS qui échoue ». Renvoie un simple bool
+//  (pas d'UI) : l'appelant choisit le message selon le contexte.
+// ─────────────────────────────────────────────────────────────────────────────
+bool AppController::hasNetworkAccess()
+{
+    const QStringList ips = {"1.1.1.1", "8.8.8.8"};
+    for (const QString& ip : ips) {
+        QTcpSocket sock;
+        sock.connectToHost(ip, 443);
+        if (sock.waitForConnected(3000)) {
+            sock.abort();
+            return true;
+        }
+    }
+    return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Pré-requis réseau juste avant un téléchargement d'installation MySQL.
+//   1. Accès réseau (WAN) — déjà contrôlé au lancement, mais revérifié ici au
+//      cas où la connexion aurait été perdue entre-temps.
+//   2. Résolution DNS de l'hôte du lien de téléchargement.
 //  En cas d'échec, un message explicite est affiché et la méthode renvoie false
 //  (l'appelant ferme alors le programme).
 // ─────────────────────────────────────────────────────────────────────────────
 bool AppController::checkDownloadConnectivity(const QString& downloadUrl)
 {
-    // 1. Accès WAN (connexion TCP/443 vers une IP publique, sans DNS).
-    auto hasWan = []() -> bool {
-        const QStringList ips = {"1.1.1.1", "8.8.8.8"};
-        for (const QString& ip : ips) {
-            QTcpSocket sock;
-            sock.connectToHost(ip, 443);
-            if (sock.waitForConnected(3000)) {
-                sock.abort();
-                return true;
-            }
-        }
-        return false;
-    };
-
-    if (!hasWan()) {
+    // 1. Accès WAN.
+    if (!hasNetworkAccess()) {
         QMessageBox::critical(nullptr, tr("Pas d'accès réseau"),
             tr("Absence d'accès réseau. Le programme ne peut pas télécharger "
                "le fichier d'installation de MySQL.\n\nFermeture du programme."));

@@ -167,6 +167,14 @@ Only confirm if your data has already been backed up.</translation>
         <translation>No network access</translation>
     </message>
     <message>
+        <source>Absence d&apos;accès réseau. Le programme a besoin d&apos;une connexion Internet pour fonctionner.
+
+Fermeture du programme.</source>
+        <translation>No network access. The program needs an Internet connection to work.
+
+The program will now close.</translation>
+    </message>
+    <message>
         <source>Absence d&apos;accès réseau. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
 
 Fermeture du programme.</source>

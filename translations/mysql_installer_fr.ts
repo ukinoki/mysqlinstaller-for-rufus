@@ -152,6 +152,12 @@ Ne confirmez que si vos données sont déjà sauvegardées.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Absence d&apos;accès réseau. Le programme a besoin d&apos;une connexion Internet pour fonctionner.
+
+Fermeture du programme.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Absence d&apos;accès réseau. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
 
 Fermeture du programme.</source>

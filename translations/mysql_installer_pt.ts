@@ -167,6 +167,14 @@ Confirme apenas se os seus dados já tiverem sido salvos.</translation>
         <translation>Sem acesso à rede</translation>
     </message>
     <message>
+        <source>Absence d&apos;accès réseau. Le programme a besoin d&apos;une connexion Internet pour fonctionner.
+
+Fermeture du programme.</source>
+        <translation>Sem acesso à rede. O programa precisa de uma conexão com a Internet para funcionar.
+
+O programa será encerrado.</translation>
+    </message>
+    <message>
         <source>Absence d&apos;accès réseau. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
 
 Fermeture du programme.</source>
