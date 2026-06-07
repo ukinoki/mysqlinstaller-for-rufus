@@ -107,8 +107,8 @@ Check your Internet connection and relaunch.</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="324"/>
-        <source>Ce programme nécessite Ubuntu dans une version supérieure à 22.04.</source>
-        <translation>This program requires an Ubuntu version higher than 22.04.</translation>
+        <source>Ce programme nécessite Ubuntu 22.04 ou une version ultérieure.</source>
+        <translation>This program requires Ubuntu 22.04 or later.</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="351"/>

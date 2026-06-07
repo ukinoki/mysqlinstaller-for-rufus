@@ -218,7 +218,7 @@ bool AppController::isAdminUser()
 }
 
 #if defined(Q_OS_LINUX)
-//  Ubuntu strictement supérieur à 22.04 (selon /etc/os-release).
+//  Ubuntu 22.04 (LTS) ou ultérieure (selon /etc/os-release).
 bool AppController::isUbuntuVersionSupported()
 {
     const QString ver =
@@ -228,7 +228,7 @@ bool AppController::isUbuntuVersionSupported()
         return false;
     const int major = p[0].toInt();
     const int minor = p[1].toInt();
-    return (major > 22) || (major == 22 && minor > 4);
+    return (major > 22) || (major == 22 && minor >= 4);   // ≥ 22.04
 }
 #endif
 
@@ -379,11 +379,11 @@ void AppController::run()
         }
     }
 #elif defined(Q_OS_LINUX)
-    // Linux : ce programme cible Ubuntu (> 22.04).
+    // Linux : ce programme cible Ubuntu (≥ 22.04 LTS).
     if (!isUbuntuVersionSupported()) {
         QMessageBox::critical(nullptr,
             tr("Version d'Ubuntu non compatible"),
-            tr("Ce programme nécessite Ubuntu dans une version supérieure à 22.04."));
+            tr("Ce programme nécessite Ubuntu 22.04 ou une version ultérieure."));
         qApp->quit();
         return;
     }

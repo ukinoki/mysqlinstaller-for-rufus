@@ -74,7 +74,7 @@ L'interface est traduite en **français** (source), **anglais**, **espagnol** et
 Tout le code spécifique est isolé par compilation conditionnelle
 (`#if defined(Q_OS_MACOS / Q_OS_WIN / Q_OS_LINUX)`).
 
-| | macOS | Windows 10/11 | Ubuntu (> 22.04) |
+| | macOS | Windows 10/11 | Ubuntu (≥ 22.04) |
 |---|---|---|---|
 | Pré-requis | macOS ≥ 13 (Ventura ; imposé par Qt 6.10) | **Visual C++ Redistributable 2022** (installé au besoin) | version Ubuntu vérifiée |
 | Droits admin | groupe `admin` (+ `osascript` pour l'élévation) | processus **élevé** (manifeste UAC) | groupe `sudo`/root (+ **`pkexec`**) |
