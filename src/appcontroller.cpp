@@ -936,29 +936,54 @@ bool AppController::installFromDmg(const QString& dmgPath)
 bool AppController::initOracleDataDir()
 {
     const QString prefix = oraclePrefix();          // /usr/local/mysql (ou vide)
-    if (prefix.isEmpty())
-        return false;
-
-    const QString data = prefix + "/data";
-    // Déjà initialisé ? mysql.ibd (dictionnaire de données InnoDB) est présent dès
-    // l'initialisation en MySQL 8.x.
-    if (QFileInfo::exists(data + "/mysql.ibd"))
-        return true;
 
     // Compte système exécutant mysqld : « _mysql » sur macOS (créé par le pkg) ;
     // repli sur « mysql » si absent.
     const QString owner =
         runCmd("id -u _mysql >/dev/null 2>&1 && echo _mysql || echo mysql").trimmed();
+    const QString data = prefix + "/data";
+
+    // Journal créé IMMÉDIATEMENT, côté non élevé, pour qu'il existe toujours (même
+    // si l'on s'arrête avant l'élévation). Le script root le complétera ensuite.
+    auto logLine = [this](const QString& s) {
+        QFile f(m_initLog);
+        if (f.open(QIODevice::Append | QIODevice::Text))
+            QTextStream(&f) << s << '\n';
+    };
+    {
+        QFile f(m_initLog);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream ts(&f);
+            ts << "== initOracleDataDir ==\n"
+               << "prefix = " << (prefix.isEmpty() ? "(vide)" : prefix) << "\n"
+               << "owner  = " << owner << "\n"
+               << "data   = " << data << "\n";
+        }
+    }
+
+    if (prefix.isEmpty()) {
+        logLine("ERREUR : /usr/local/mysql/bin/mysql introuvable "
+                "(oraclePrefix vide) — le pkg Oracle n'a pas été détecté.");
+        return false;
+    }
+
+    // Déjà initialisé ? mysql.ibd (dictionnaire de données InnoDB) est présent dès
+    // l'initialisation en MySQL 8.x.
+    if (QFileInfo::exists(data + "/mysql.ibd")) {
+        logLine("Déjà initialisé (mysql.ibd présent) — rien à faire.");
+        return true;
+    }
 
     // Script élevé (une seule invite admin via osascript). On prépare un datadir
     // vide appartenant au compte mysql, puis on initialise sans mot de passe.
     //  - --no-defaults : ignore tout /etc/my.cnf résiduel qui ferait échouer l'init.
-    //  - toute la sortie est journalisée dans m_initLog pour diagnostic.
+    //  - sortie ajoutée (>>) à m_initLog pour diagnostic.
     const QString script = QStringLiteral(
         "PREFIX='%1'; DATA='%2'; OWNER='%3'; LOG='%4'\n"
         "{\n"
-        "  echo \"== init datadir (owner=$OWNER) ==\"\n"
+        "  echo '-- script root --'\n"
         "  id \"$OWNER\" || echo \"(compte $OWNER introuvable)\"\n"
+        "  ls -ld \"$PREFIX\" \"$PREFIX/bin/mysqld\"\n"
         "  rm -rf \"$DATA\"\n"
         "  mkdir -p \"$DATA\"\n"
         "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
@@ -966,11 +991,13 @@ bool AppController::initOracleDataDir()
         "--user=\"$OWNER\" --basedir=\"$PREFIX\" --datadir=\"$DATA\"\n"
         "  echo \"mysqld --initialize rc=$?\"\n"
         "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
-        "} > \"$LOG\" 2>&1\n"
+        "} >> \"$LOG\" 2>&1\n"
         "chmod 644 \"$LOG\" 2>/dev/null\n")
         .arg(prefix, data, owner, m_initLog);
 
-    runCmdElevated(script);
+    const bool elevated = runCmdElevated(script);
+    if (!elevated)
+        logLine("ATTENTION : l'élévation (osascript admin) a été annulée ou a échoué.");
 
     // Succès = le dictionnaire de données a bien été créé.
     return QFileInfo::exists(data + "/mysql.ibd");
