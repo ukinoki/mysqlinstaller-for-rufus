@@ -121,7 +121,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path: dist/*.AppImage
+          path: |
+            dist/*.AppImage
+            dist/install_appimage.sh
           if-no-files-found: error
 
   # ===========================================================================
@@ -152,6 +154,7 @@ jobs:
           files: |
             artifacts/MySQLInstallerForRufusSetup.exe
             artifacts/*.AppImage
+            artifacts/install_appimage.sh
           body: |
             ## MySQL Installer for Rufus ${{ inputs.release_tag != '' && inputs.release_tag || github.ref_name }}
 
@@ -162,7 +165,10 @@ jobs:
             > « Exécuter quand même » (exe non encore signé Authenticode).
 
             ### Linux (Ubuntu ≥ 22.04)
-            Téléchargez le fichier `.AppImage`, rendez-le exécutable
-            (`chmod +x`) puis lancez-le.
-            > ℹ️ Nécessite `libfuse2` : `sudo apt install libfuse2`.
+            `sudo apt install libfuse2` (une fois), puis :
+            - **Lancement direct** : `chmod +x *.AppImage` puis double-clic.
+            - **Installation dans le menu** (équivalent setup.exe) : téléchargez
+              aussi `install_appimage.sh` (à côté de l'AppImage) et lancez
+              `./install_appimage.sh` — l'app apparaît dans le menu (désinstaller :
+              `./install_appimage.sh --uninstall`).
             > L'application demande le mot de passe via pkexec au besoin.
