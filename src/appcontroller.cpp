@@ -566,10 +566,8 @@ void AppController::onCredentialsAccepted()
     // (utilisateur + dossier/Samba + my.cnf) en UNE seule élévation, pour ne
     // demander le mot de passe système qu'une fois. Best-effort : les étapes
     // ci-dessous vérifient l'état et reprennent ce qui manquerait.
-    if (m_freshInstall) {
-        prepareCreateModeLinux();
-        waitForMySQL(20);     // le script redémarre mysqld en fin de parcours
-    }
+    if (m_freshInstall)
+        prepareCreateModeLinux();   // (affiche son propre indicateur + attend mysqld)
 #endif
 
     // Installation neuve : créer l'utilisateur — les étapes suivantes
@@ -1507,12 +1505,32 @@ bool AppController::prepareCreateModeLinux()
 
     const QString script =
         "IFS= read -r PW\n"
+        // Journal de diagnostic (le mot de passe n'y apparaît jamais : pas de
+        // set -x, et le SQL part dans le tube vers mysql, pas sur la sortie).
+        "exec >/tmp/rufus_prepare.log 2>&1\n"
+        "echo '### createUser ###'; "
         + userSql
+        + " echo \"### createUser rc=$? ###\"; "
+          "echo '### folderSamba ###'; "
         + linuxFolderSambaScript(path, user)
-        + "; " + cnfFragment;
+        + "; echo \"### folderSamba rc=$? ###\"; "
+          "echo '### cnf ###'; "
+        + cnfFragment
+        + " echo \"### cnf rc=$? ###\"; echo '### DONE ###'\n";
+
+    // Indicateur d'activité pendant l'opération (apt Samba/wsdd, base, restart…).
+    ProgressDialog* dlg = new ProgressDialog(
+        tr("Configuration du serveur en cours…\n"
+           "(base de données, dossier partagé, Samba — patientez)"));
+    dlg->show();
+    QApplication::processEvents();
 
     const bool ok = runCmdElevated(script, m_password + "\n");
     QFile::remove(cnfTmp);
+    waitForMySQL(20);                 // le serveur redémarre en fin de script
+
+    dlg->close();
+    delete dlg;
     return ok;
 }
 
