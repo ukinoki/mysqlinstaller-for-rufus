@@ -486,9 +486,15 @@ void AppController::run()
     }
 
     if (needInstall) {
-        // Pré-requis réseau AVANT le passage en mode Create : sans accès WAN ou
-        // si le lien de téléchargement ne se résout pas, l'installation est
-        // impossible. checkDownloadConnectivity() affiche le message adéquat.
+        // Bascule en mode Create DÈS l'acceptation (avant le téléchargement) et
+        // rafraîchissement immédiat de la fiche, pour que l'utilisateur voie tout
+        // de suite le passage en mode « Créer un compte » pendant l'installation.
+        m_dialog->setMode(CredentialsDialog::Mode::Create);
+        QApplication::processEvents();
+
+        // Pré-requis réseau : sans accès WAN ou si le lien de téléchargement ne
+        // se résout pas, l'installation est impossible. checkDownloadConnectivity()
+        // affiche le message adéquat.
         QString dlUrl;
 #if defined(Q_OS_WIN)
         dlUrl = cfg.winUrl;
@@ -509,9 +515,6 @@ void AppController::run()
         // (sous Windows installMySQL() le refait, mais c'est nécessaire sur
         // macOS/Linux où l'installeur écrit par-dessus une instance active).
         if (installed) stopMySQL();
-
-        // Bascule en mode Create avant l'installation (titre et bouton adaptés).
-        m_dialog->setMode(CredentialsDialog::Mode::Create);
 
         if (!installMySQL()) {
             // installMySQL() affiche déjà un message détaillé en cas d'échec.
