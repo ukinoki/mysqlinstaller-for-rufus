@@ -1599,8 +1599,10 @@ bool AppController::setupSharedFolder()
     auto alreadyConfigured = [&]() -> bool {
         if (!QDir(path + "/Rufus/Imagerie").exists())
             return false;
-        // AppArmor : profil mysqld désactivé (lien dans disable/) ?
-        if (!QFileInfo("/etc/apparmor.d/disable/usr.sbin.mysqld").isSymLink())
+        // AppArmor : si un profil mysqld EXISTE, il doit être neutralisé (lien
+        // dans disable/). S'il n'y a pas de profil, il n'y a rien à désactiver.
+        if (QFileInfo::exists("/etc/apparmor.d/usr.sbin.mysqld")
+            && !QFileInfo("/etc/apparmor.d/disable/usr.sbin.mysqld").isSymLink())
             return false;
         QFile smb("/etc/samba/smb.conf");
         if (!smb.open(QIODevice::ReadOnly | QIODevice::Text))
