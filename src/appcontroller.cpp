@@ -561,9 +561,20 @@ void AppController::onCredentialsAccepted()
     }
     m_dialog->checkStep(1);
 
-    // Installation neuve : créer l'utilisateur tout de suite — les étapes
-    // suivantes (secure_file_priv, test lecture/écriture) ont besoin d'une
-    // connexion valide.
+#if defined(Q_OS_LINUX)
+    // Installation neuve sous Linux : regrouper TOUT le paramétrage root
+    // (utilisateur + dossier/Samba + my.cnf) en UNE seule élévation, pour ne
+    // demander le mot de passe système qu'une fois. Best-effort : les étapes
+    // ci-dessous vérifient l'état et reprennent ce qui manquerait.
+    if (m_freshInstall) {
+        prepareCreateModeLinux();
+        waitForMySQL(20);     // le script redémarre mysqld en fin de parcours
+    }
+#endif
+
+    // Installation neuve : créer l'utilisateur — les étapes suivantes
+    // (secure_file_priv, test lecture/écriture) ont besoin d'une connexion valide.
+    // (Sous Linux, createUser() court-circuite si prepareCreateModeLinux l'a créé.)
     if (m_freshInstall && !createUser()) {
         m_dialog->setError(tr("Impossible de créer l'utilisateur '%1'.").arg(m_login));
         m_dialog->setInputsEnabled(true);
@@ -1176,25 +1187,29 @@ void AppController::restartMySQL()
 //  Garantit que secure_file_priv pointe sur /Users/Shared dans my.cnf. La lecture
 //  est gratuite (aucune élévation) ; seule la correction (rare) édite my.cnf en
 //  root et redémarre mysqld.
-bool AppController::ensureSecureFilePriv()
+//  Variables [mysqld] requises par Rufus (source unique pour my.cnf) :
+//   • secure_file_priv = dossier partagé (lecture/écriture des fichiers) ;
+//   • sql_mode sans ONLY_FULL_GROUP_BY (sinon Rufus échoue) — toutes plateformes ;
+//   • bind-address = * sous Linux (apt met 127.0.0.1 → accès distant bloqué).
+//  (Pas de character-set : MySQL est déjà en utf8mb4 par défaut — utile seulement
+//   sous MariaDB.)
+QList<QPair<QString, QString>> AppController::rufusCnfVars() const
 {
-    const QString target = sharedFolderPath();
-
-    // Variables [mysqld] requises par Rufus, écrites en une seule passe :
-    //   • secure_file_priv = dossier partagé (lecture/écriture des fichiers) ;
-    //   • sql_mode sans ONLY_FULL_GROUP_BY (sinon Rufus échoue) — toutes
-    //     plateformes ; le défaut MySQL inclut ONLY_FULL_GROUP_BY.
-    // (Pas de character-set : MySQL est déjà en utf8mb4 par défaut — utile
-    //  seulement sous MariaDB.)
     QList<QPair<QString, QString>> vars = {
-        qMakePair(QStringLiteral("secure_file_priv"), target),
+        qMakePair(QStringLiteral("secure_file_priv"), sharedFolderPath()),
         qMakePair(QStringLiteral("sql_mode"),
                   QStringLiteral("STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION")),
     };
 #if defined(Q_OS_LINUX)
-    // bind-address = * : autoriser les accès distants (apt met 127.0.0.1).
     vars << qMakePair(QStringLiteral("bind-address"), QStringLiteral("*"));
 #endif
+    return vars;
+}
+
+bool AppController::ensureSecureFilePriv()
+{
+    const QString target = sharedFolderPath();
+    const QList<QPair<QString, QString>> vars = rufusCnfVars();
 
     // Déjà toutes configurées ? → aucune élévation.
     bool allOk = true;
@@ -1420,6 +1435,13 @@ bool AppController::checkPrivileges(QStringList& outMissing)
 
 bool AppController::createUser()
 {
+#if defined(Q_OS_LINUX)
+    // Déjà créé (ex. par prepareCreateModeLinux) ? On court-circuite pour ne pas
+    // redemander le mot de passe système.
+    if (tryConnect())
+        return true;
+#endif
+
     const QString sql = QString(
         "CREATE USER IF NOT EXISTS '%1'@'localhost' IDENTIFIED BY '%2';"
         "GRANT ALL PRIVILEGES ON *.* TO '%1'@'localhost' WITH GRANT OPTION;"
@@ -1448,6 +1470,96 @@ bool AppController::createUser()
     return !out.contains("ERROR", Qt::CaseInsensitive);
 #endif
 }
+
+#if defined(Q_OS_LINUX)
+//  Mode Create (Linux) : exécute TOUT le paramétrage root en UNE SEULE élévation
+//  pkexec, pour ne demander le mot de passe système qu'une fois :
+//    1. création de l'utilisateur MySQL (mysql en root via auth_socket) ;
+//    2. dossier + AppArmor + ufw + Samba + utilisateur Samba + wsdd ;
+//    3. écriture de my.cnf (secure_file_priv, sql_mode, bind-address) + restart.
+//  Le mot de passe (m_password) est lu une fois sur l'entrée standard ($PW) et
+//  réutilisé pour le SQL ET pour smbpasswd — jamais sur disque ni en argument.
+//  Best-effort : en cas d'échec partiel, les étapes individuelles (qui vérifient
+//  l'état au préalable) reprennent ce qui manque.
+bool AppController::prepareCreateModeLinux()
+{
+    const QString path = sharedFolderPath();
+    const QString user = runCmd("id -un 2>/dev/null").trimmed();
+    QDir().mkpath(path);
+
+    // my.cnf préparé hors élévation (mêmes variables que ensureSecureFilePriv).
+    const QString cnfTmp = writeCnfToTemp(rufusCnfVars());
+    const QString cnfDst = getCnfPath();
+    if (cnfTmp.isEmpty())
+        return false;
+
+    // 1. SQL de création de l'utilisateur : login embarqué (alphanumérique),
+    //    mot de passe = $PW (placeholder printf %s rempli par "$PW").
+    const QString userSql = QString(
+        "printf \"CREATE USER IF NOT EXISTS '%1'@'localhost' IDENTIFIED BY '%s'; "
+        "GRANT ALL PRIVILEGES ON *.* TO '%1'@'localhost' WITH GRANT OPTION; "
+        "FLUSH PRIVILEGES;\\n\" \"$PW\" | mysql -u root; ").arg(m_login);
+
+    // 3. Copie de my.cnf en place + redémarrage du serveur.
+    const QString cnfFragment = QString(
+        "cp '%1' '%2' && chmod 644 '%2' && systemctl restart mysql; ")
+        .arg(cnfTmp, cnfDst);
+
+    const QString script =
+        "IFS= read -r PW\n"
+        + userSql
+        + linuxFolderSambaScript(path, user)
+        + "; " + cnfFragment;
+
+    const bool ok = runCmdElevated(script, m_password + "\n");
+    QFile::remove(cnfTmp);
+    return ok;
+}
+
+//  Fragment shell (root) du paramétrage dossier + Samba, conforme à la procédure
+//  Rufus. Le mot de passe Samba est attendu dans la variable $PW (renseignée par
+//  l'appelant via « IFS= read -r PW », mot de passe sur stdin). Réutilisé par
+//  setupSharedFolder() et par prepareCreateModeLinux() (élévation groupée).
+QString AppController::linuxFolderSambaScript(const QString& path,
+                                              const QString& user) const
+{
+    return QString(
+        // Arborescence Rufus + droits : chmod -R 755, chown -R sur tout /Users.
+        "mkdir -p '%1/Rufus/Imagerie'; chmod -R 755 '%1'; chown -R %2 /Users; "
+        // — AppArmor : DÉSACTIVER le profil mysqld (sinon lecture des images
+        //   bloquée). Lien dans disable/ + déchargement immédiat. —
+        "mkdir -p /etc/apparmor.d/disable; "
+        "if [ -f /etc/apparmor.d/usr.sbin.mysqld ]; then "
+          "ln -sf /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/; "
+          "apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld 2>/dev/null || true; "
+        "fi; "
+        // — pare-feu : ouvrir le port MySQL —
+        "ufw allow 3306 || true; "
+        // — Samba : installer si absent (apt lit /dev/null pour ne pas consommer
+        //   le mot de passe présent sur l'entrée standard) —
+        "dpkg -s samba >/dev/null 2>&1 || "
+          "{ apt-get update </dev/null; DEBIAN_FRONTEND=noninteractive "
+          "apt-get install -y samba </dev/null; }; "
+        // — protocole NT1/SMB1 (appareils de mesure anciens) —
+        "grep -q 'server min protocol' /etc/samba/smb.conf 2>/dev/null || "
+          "sed -i '/^\\[global\\]/a server min protocol = NT1' /etc/samba/smb.conf; "
+        // — partage [Rufus] -> /Users/Shared/Rufus (sous-dossiers accessibles) —
+        "grep -q '^\\[Rufus\\]' /etc/samba/smb.conf 2>/dev/null || "
+          "printf '\\n[Rufus]\\n   comment = Rufus\\n   path = %1/Rufus\\n"
+          "   browseable = yes\\n   read only = no\\n   guest ok = yes\\n"
+          "   create mask = 0755\\n   directory mask = 0755\\n' >> /etc/samba/smb.conf; "
+        // — utilisateur Samba = compte Ubuntu ; mot de passe = $PW, fourni à
+        //   smbpasswd -s (2 lignes) via printf. Accès Windows 10/11 authentifié. —
+        "printf '%s\\n%s\\n' \"$PW\" \"$PW\" | smbpasswd -s -a '%2' >/dev/null 2>&1 || true; "
+        "systemctl restart smbd 2>/dev/null || service smbd restart 2>/dev/null || true; "
+        // — wsdd : découverte WSD (partage visible sous Windows 10/11) —
+        "dpkg -s wsdd >/dev/null 2>&1 || "
+          "{ apt-get update </dev/null; DEBIAN_FRONTEND=noninteractive "
+          "apt-get install -y wsdd </dev/null; }; "
+        "systemctl enable --now wsdd 2>/dev/null || true"
+        ).arg(path, user);
+}
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Dossier partagé : existe et est partagé
@@ -1490,56 +1602,12 @@ bool AppController::setupSharedFolder()
     if (alreadyConfigured())
         return true;
 
-    // Sinon, tout le paramétrage privilégié en une seule élévation (pkexec) :
-    //   • créer /Users/Shared/Rufus/Imagerie, droits 755, propriétaire = user ;
-    //   • AppArmor : désactiver le profil mysqld (lecture des images) ;
-    //   • ouvrir le port 3306 (ufw) ;
-    //   • installer Samba si besoin et partager le dossier (invité + NT1) ;
-    //   • créer un utilisateur Samba = compte Ubuntu (accès Windows 10/11) ;
-    //   • installer wsdd pour rendre le partage visible sous Windows 10/11.
+    // Sinon, tout le paramétrage privilégié en une seule élévation (pkexec). Le
+    // mot de passe Samba est lu sur l'entrée standard (1 ligne) → $PW, jamais sur
+    // disque ; « IFS= read -r PW » le récupère avant de lancer le reste.
     const QString user = runCmd("id -un 2>/dev/null").trimmed();
-    const QString script = QString(
-        // Création de l'arborescence Rufus + droits (cf. procédure Rufus Linux) :
-        // chmod -R 755 sur le dossier partagé, chown -R sur tout /Users.
-        "mkdir -p '%1/Rufus/Imagerie'; chmod -R 755 '%1'; chown -R %2 /Users; "
-        // — AppArmor : DÉSACTIVER le profil mysqld (sinon AppArmor bloque la
-        //   lecture des fichiers d'imagerie par MySQL). Conforme à la procédure
-        //   Rufus : lien dans disable/ + déchargement immédiat du profil. —
-        "mkdir -p /etc/apparmor.d/disable; "
-        "if [ -f /etc/apparmor.d/usr.sbin.mysqld ]; then "
-          "ln -sf /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/; "
-          "apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld 2>/dev/null || true; "
-        "fi; "
-        // — pare-feu : ouvrir le port MySQL —
-        "ufw allow 3306 || true; "
-        // — Samba : installer si absent puis partager (apt lit /dev/null, pour ne
-        //   pas consommer le mot de passe Samba présent sur l'entrée standard) —
-        "dpkg -s samba >/dev/null 2>&1 || "
-          "{ apt-get update </dev/null; DEBIAN_FRONTEND=noninteractive "
-          "apt-get install -y samba </dev/null; }; "
-        // — accepter le protocole NT1/SMB1 (appareils de mesure anciens) —
-        "grep -q 'server min protocol' /etc/samba/smb.conf 2>/dev/null || "
-          "sed -i '/^\\[global\\]/a server min protocol = NT1' /etc/samba/smb.conf; "
-        // — partage du dossier Rufus (/Users/Shared/Rufus) : Rufus y crée ses
-        //   sous-dossiers, accessibles aux autres postes et aux appareils —
-        "grep -q '^\\[Rufus\\]' /etc/samba/smb.conf 2>/dev/null || "
-          "printf '\\n[Rufus]\\n   comment = Rufus\\n   path = %1/Rufus\\n"
-          "   browseable = yes\\n   read only = no\\n   guest ok = yes\\n"
-          "   create mask = 0755\\n   directory mask = 0755\\n' >> /etc/samba/smb.conf; "
-        // — utilisateur Samba = compte Ubuntu courant ; mot de passe lu sur
-        //   l'entrée standard (2 lignes : nouveau mdp + confirmation). Permet aux
-        //   postes Windows 10/11 (qui refusent l'invité) de se connecter. —
-        "smbpasswd -s -a '%2' >/dev/null 2>&1 || true; "
-        "systemctl restart smbd 2>/dev/null || service smbd restart 2>/dev/null || true; "
-        // — wsdd : découverte WSD pour que le partage apparaisse sous Windows —
-        "dpkg -s wsdd >/dev/null 2>&1 || "
-          "{ apt-get update </dev/null; DEBIAN_FRONTEND=noninteractive "
-          "apt-get install -y wsdd </dev/null; }; "
-        "systemctl enable --now wsdd 2>/dev/null || true"
-        ).arg(path, user);
-    // Mot de passe Samba = mot de passe saisi dans le programme, transmis via
-    // l'entrée standard (jamais sur disque). smbpasswd -s attend 2 lignes.
-    runCmdElevated(script, m_password + "\n" + m_password + "\n");
+    runCmdElevated("IFS= read -r PW\n" + linuxFolderSambaScript(path, user),
+                   m_password + "\n");
     return QDir(path).exists();
 #else
     // Déjà partagé ? (lecture seule, aucune élévation)

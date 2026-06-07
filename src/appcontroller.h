@@ -80,6 +80,19 @@ private:
     bool    ensureSecureFilePriv();      // secure_file_priv = /Users/Shared (my.cnf)
     bool    testSharedFolderRW();        // mysql lit ET écrit un fichier test
     bool    guideMysqldFullDiskAccess(); // guide l'octroi du FDA à mysqld (ré-essai)
+#if defined(Q_OS_LINUX)
+    //  Regroupe TOUT le paramétrage root du mode Create en une seule élévation
+    //  (utilisateur MySQL + dossier/AppArmor/ufw/Samba/wsdd + my.cnf + restart),
+    //  pour ne demander le mot de passe système qu'une fois. Best-effort : les
+    //  étapes individuelles (qui vérifient l'état) reprennent ce qui manquerait.
+    bool    prepareCreateModeLinux();
+    //  Fragment shell du paramétrage dossier+Samba (utilise $PW pour smbpasswd) ;
+    //  réutilisé par setupSharedFolder() et prepareCreateModeLinux().
+    QString linuxFolderSambaScript(const QString& path, const QString& user) const;
+#endif
+    //  Variables [mysqld] requises par Rufus (secure_file_priv, sql_mode, +
+    //  bind-address sous Linux). Source unique pour my.cnf.
+    QList<QPair<QString, QString>> rufusCnfVars() const;
     QString getCnfVar(const QString& key);
     //  Prépare une copie de my.cnf avec une ou plusieurs paires clé=valeur
     //  (section [mysqld]) dans un fichier temporaire, SANS élévation. Renvoie le
