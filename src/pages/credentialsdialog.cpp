@@ -401,20 +401,25 @@ void CredentialsDialog::clearError()
 
 void CredentialsDialog::setInputsEnabled(bool enabled)
 {
-    m_login->setEnabled(enabled);
+    // Le champ login reste TOUJOURS actif et garde le focus : le curseur est ainsi
+    // prêt dès l'ouverture, alors que la fiche s'ouvre verrouillée le temps de
+    // vérifier/installer MySQL. Le bouton OK demeure inactif tant que MySQL n'est
+    // pas prêt → aucune validation prématurée possible (cf. keyPressEvent).
+    m_login->setEnabled(true);
     m_password->setEnabled(enabled);
-    if (m_mode == Mode::Create) m_confirm->setEnabled(enabled);
+    // Confirmation désactivée INCONDITIONNELLEMENT : sinon, rendue visible lors du
+    // passage en mode Create alors qu'elle était restée active (verrou posé en mode
+    // Verify, où le champ est masqué), elle captait le focus du login.
+    m_confirm->setEnabled(enabled);
     // À la réactivation, l'état du bouton dépend de la validité des champs ;
     // au verrouillage (traitement en cours), il est désactivé.
-    if (enabled) {
+    if (enabled)
         updateOkState();
-        // La main est donnée à l'utilisateur : placer le focus sur le champ login,
-        // prêt à la saisie (le texte éventuel est sélectionné pour une ressaisie).
-        m_login->setFocus(Qt::OtherFocusReason);
-        m_login->selectAll();
-    } else {
+    else
         m_okBtn->setEnabled(false);
-    }
+    // Curseur prêt dans le champ login (toujours actif), à chaque (dé)verrouillage.
+    m_login->setFocus(Qt::OtherFocusReason);
+    m_login->selectAll();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
