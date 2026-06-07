@@ -80,7 +80,7 @@ Tout le code spécifique est isolé par compilation conditionnelle
 | Droits admin | groupe `admin` (+ `osascript` pour l'élévation) | processus **élevé** (manifeste UAC) | groupe `sudo`/root (+ **`pkexec`**) |
 | Installation MySQL | DMG Oracle + `installer` | **archive ZIP** + `mysqld --initialize-insecure` + `--install` (service) | **`apt-get install mysql-server`** |
 | Service | `launchctl` / `brew services` | `net start/stop MySQL` | `systemctl … mysql` |
-| Dossier partagé | `/Users/Shared` (partage SMB) | `C:\Users\Public` (déjà partagé) | `/Users/Shared` (créé, AppArmor, `ufw allow 3306`, Samba) |
+| Dossier partagé | `/Users/Shared` (partage SMB) | `C:\Users\Public` (déjà partagé) | `/Users/Shared` (créé, AppArmor, `ufw allow 3306`, Samba, `wsdd`) |
 | Fichier de conf | `/etc/my.cnf` | `C:\ProgramData\MySQL\MySQL Server 8.4\my.ini` | `…/mysql.conf.d/mysqld.cnf` |
 | `PATH` | `/etc/paths.d/mysql` | `PATH` *Machine* (registre) | `/etc/profile.d/mysql.sh` |
 | Désinstallation | — | **entrée « Applications et fonctionnalités »** (registre `Uninstall` + script auto-élevant, taille affichée) | — |

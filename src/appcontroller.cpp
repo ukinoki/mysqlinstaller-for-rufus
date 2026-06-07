@@ -1385,6 +1385,9 @@ bool AppController::setupSharedFolder()
         if (!smb.open(QIODevice::ReadOnly | QIODevice::Text)
             || !QString::fromUtf8(smb.readAll()).contains("[Shared]"))
             return false;
+        // wsdd installé (découverte du partage depuis l'explorateur Windows) ?
+        if (!runCmd("dpkg -s wsdd 2>/dev/null").contains("Status: install ok"))
+            return false;
         return true;
     };
     if (alreadyConfigured())
@@ -1394,7 +1397,8 @@ bool AppController::setupSharedFolder()
     //   • créer /Users/Shared, propriétaire = utilisateur courant ;
     //   • AppArmor : autoriser mysqld à accéder au dossier ;
     //   • ouvrir le port 3306 (ufw) ;
-    //   • installer Samba si besoin et partager le dossier sur le réseau.
+    //   • installer Samba si besoin et partager le dossier sur le réseau ;
+    //   • installer wsdd pour rendre le partage visible sous Windows 10/11.
     const QString user = runCmd("id -un 2>/dev/null").trimmed();
     const QString script = QString(
         "mkdir -p '%1'; chown %2 '%1'; chmod 0775 '%1'; "
@@ -1414,7 +1418,11 @@ bool AppController::setupSharedFolder()
         "grep -q '^\\[Shared\\]' /etc/samba/smb.conf 2>/dev/null || "
           "printf '\\n[Shared]\\n   path = %1\\n   browseable = yes\\n"
           "   read only = no\\n   guest ok = yes\\n' >> /etc/samba/smb.conf; "
-        "systemctl restart smbd 2>/dev/null || service smbd restart 2>/dev/null || true"
+        "systemctl restart smbd 2>/dev/null || service smbd restart 2>/dev/null || true; "
+        // — wsdd : découverte WSD pour que le partage apparaisse sous Windows —
+        "dpkg -s wsdd >/dev/null 2>&1 || "
+          "{ apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y wsdd; }; "
+        "systemctl enable --now wsdd 2>/dev/null || true"
         ).arg(path, user);
     runCmdElevated(script);
     return QDir(path).exists();
