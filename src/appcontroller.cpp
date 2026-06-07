@@ -642,9 +642,17 @@ bool AppController::isMySQLInstalled()
         return true;
     return runCmd("mysql --version " + NUL()).contains("mysql", Qt::CaseInsensitive);
 #elif defined(Q_OS_LINUX)
-    if (runCmd("dpkg -s mysql-server " + NUL()).contains("Status: install ok"))
+    // Détecter le SERVEUR (mysql-server / mariadb-server), PAS le client seul :
+    // un client « mysql » peut rester installé sans serveur, ce qui faisait
+    // croire à tort que MySQL était présent après une désinstallation.
+    //   • paquet serveur installé (ligne dpkg « ii ») ;
+    //   • OU binaire serveur présent (mysqld / mariadbd).
+    if (!runCmd("dpkg -l 2>/dev/null | "
+                "grep -E '^ii +(mysql-server|mariadb-server)'").trimmed().isEmpty())
         return true;
-    return runCmd("mysql --version " + NUL()).contains("mysql", Qt::CaseInsensitive);
+    if (QFile::exists("/usr/sbin/mysqld") || QFile::exists("/usr/sbin/mariadbd"))
+        return true;
+    return false;
 #else
     QString brewList = runCmd("brew list --formula 2>/dev/null");
     if (brewList.contains(QRegularExpression("\\bmysql(@8\\.4)?\\b")))

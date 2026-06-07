@@ -40,9 +40,11 @@ echo
 echo "==> 1/7  Arrêt et purge de MySQL…"
 systemctl stop mysql  2>/dev/null
 systemctl stop mysqld 2>/dev/null
-DEBIAN_FRONTEND=noninteractive apt-get purge -y 'mysql-server.*' 'mysql-client.*' \
-    'mysql-community.*' mysql-common 2>/dev/null
+systemctl stop mariadb 2>/dev/null
+# Purge large (serveur ET client), comme la procédure Rufus (apt remove --purge mysql*).
+DEBIAN_FRONTEND=noninteractive apt-get purge -y 'mysql.*' 'mariadb.*' 2>/dev/null
 DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge 2>/dev/null
+apt-get autoclean 2>/dev/null
 rm -rf /etc/mysql /var/lib/mysql /var/log/mysql /var/lib/mysql-files /var/lib/mysql-keyring
 
 echo "==> 2/7  Suppression du PATH (/etc/profile.d/mysql.sh)…"
