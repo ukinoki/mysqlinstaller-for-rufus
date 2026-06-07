@@ -199,8 +199,12 @@ mysql_installer/
   mise à jour forcée vers 8.4).
 - **Linux** : build et déroulé complet **encore à valider** ; dépendances runtime
   `pkexec`, `ufw`, `apparmor_parser`, `samba`.
-- **macOS** : le nom exact du DMG 8.4.9 (`mysql-8.4.9-macos14|15-*.dmg`) est à
-  confirmer au moment du test (cf. `downloadOracleDmg()`).
+- **macOS** : le suffixe `macosNN` du nom de DMG (ex. `macos14`, `macos15`,
+  `macos26`) varie selon la version de macOS visée par la build Oracle.
+  `downloadOracleDmg()` ne le code plus en dur : il **sonde** l'URL configurée
+  puis les variantes connues (`macos26 → macos13`) et télécharge le premier DMG
+  réellement servi par Oracle. L'URL du `mysql_config.json` sert de candidat
+  prioritaire ; en cas de nouveau suffixe, il suffit de l'y mettre à jour.
 - **Traductions** : penser à `lupdate`/`lrelease` — les chaînes en/es/pt ajoutées
   récemment restent à compléter.
 - **Windows — signature** : signer l'exécutable (Authenticode) pour la

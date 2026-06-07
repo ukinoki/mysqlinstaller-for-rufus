@@ -818,10 +818,40 @@ QString AppController::downloadOracleDmg()
 {
     const MySQLRemoteConfig cfg = fetchRemoteConfig();
 
-    const QString arch = runCmd("uname -m 2>/dev/null").trimmed();
-    const QString url  = (arch == "arm64") ? cfg.macArm64Url : cfg.macX86Url;
+    const QString arch    = runCmd("uname -m 2>/dev/null").trimmed();
+    const QString baseUrl = (arch == "arm64") ? cfg.macArm64Url : cfg.macX86Url;
+
+    // Oracle nomme ses DMG avec un suffixe « macosNN » correspondant à la version
+    // de macOS contre laquelle le binaire est compilé (ex. macos14, macos15). Ce
+    // suffixe varie d'une release à l'autre et n'est pas toujours connu à l'avance.
+    // Plutôt que de le coder en dur, on construit une liste de candidats — l'URL
+    // configurée d'abord, puis les variantes macos15 → macos13 — et on retient la
+    // première réellement servie par Oracle (sonde HTTP d'un seul octet).
+    QStringList candidates;
+    candidates << baseUrl;
+    QRegularExpression macRe(R"(macos\d+)");
+    if (macRe.match(baseUrl).hasMatch()) {
+        for (const QString& tag : {QStringLiteral("macos26"),
+                                   QStringLiteral("macos15"),
+                                   QStringLiteral("macos14"),
+                                   QStringLiteral("macos13")}) {
+            const QString alt = QString(baseUrl).replace(macRe, tag);
+            if (!candidates.contains(alt)) candidates << alt;
+        }
+    }
+
+    QString url = baseUrl;   // dernier recours si aucune sonde n'aboutit
+    for (const QString& cand : candidates) {
+        // -r 0-0 : ne télécharge qu'un octet ; -L : suit la redirection vers le
+        // miroir CDN ; on inspecte le code HTTP final (200 ou 206 = disponible).
+        const QString code = runCmdFull(
+            QString("curl -sSL -r 0-0 -o /dev/null -w '%{http_code}' '%1' 2>/dev/null")
+                .arg(cand)).trimmed();
+        if (code.endsWith("200") || code.endsWith("206")) { url = cand; break; }
+    }
+
     const QString fileName = url.section('/', -1);
-    QString tmpDmg     = QDir::tempPath() + "/" + fileName;
+    QString tmpDmg         = QDir::tempPath() + "/" + fileName;
 
     runLongOp(
         QString("curl -fSL --progress-bar -o '%1' '%2' 2>&1").arg(tmpDmg, url),
