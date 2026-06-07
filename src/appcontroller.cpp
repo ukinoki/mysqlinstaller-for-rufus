@@ -1135,22 +1135,21 @@ bool AppController::ensureSecureFilePriv()
 {
     const QString target = sharedFolderPath();
 
-#if defined(Q_OS_LINUX)
-    // Configuration de my.cnf requise par Rufus (procédure Rufus Linux). Toutes
-    // les variables sont écrites dans [mysqld] puis le serveur redémarré, en UNE
-    // SEULE élévation (pkexec) :
+    // Variables [mysqld] requises par Rufus, écrites en une seule passe :
     //   • secure_file_priv = dossier partagé (lecture/écriture des fichiers) ;
-    //   • sql_mode sans ONLY_FULL_GROUP_BY (sinon Rufus échoue) ;
-    //   • bind-address = * (accès distant ; apt met 127.0.0.1 par défaut) ;
-    //   • jeu de caractères utf8mb4 (textes médicaux accentués).
-    const QList<QPair<QString, QString>> vars = {
-        qMakePair(QStringLiteral("secure_file_priv"),     target),
+    //   • sql_mode sans ONLY_FULL_GROUP_BY (sinon Rufus échoue) — toutes
+    //     plateformes ; le défaut MySQL inclut ONLY_FULL_GROUP_BY.
+    // (Pas de character-set : MySQL est déjà en utf8mb4 par défaut — utile
+    //  seulement sous MariaDB.)
+    QList<QPair<QString, QString>> vars = {
+        qMakePair(QStringLiteral("secure_file_priv"), target),
         qMakePair(QStringLiteral("sql_mode"),
                   QStringLiteral("STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION")),
-        qMakePair(QStringLiteral("bind-address"),         QStringLiteral("*")),
-        qMakePair(QStringLiteral("character-set-server"), QStringLiteral("utf8mb4")),
-        qMakePair(QStringLiteral("collation-server"),     QStringLiteral("utf8mb4_general_ci")),
     };
+#if defined(Q_OS_LINUX)
+    // bind-address = * : autoriser les accès distants (apt met 127.0.0.1).
+    vars << qMakePair(QStringLiteral("bind-address"), QStringLiteral("*"));
+#endif
 
     // Déjà toutes configurées ? → aucune élévation.
     bool allOk = true;
@@ -1162,23 +1161,31 @@ bool AppController::ensureSecureFilePriv()
     const QString tmp = writeCnfToTemp(vars);
     if (tmp.isEmpty())
         return false;
-    const QString cnf = getCnfPath();
-    const bool ok = runCmdElevated(QString(
+    const QString path = getCnfPath();
+    bool ok;
+
+#if defined(Q_OS_LINUX)
+    // Copie + redémarrage en UNE SEULE élévation (pkexec).
+    ok = runCmdElevated(QString(
         "cp '%1' '%2' && chmod 644 '%2' && systemctl restart mysql")
-        .arg(tmp, cnf));
+        .arg(tmp, path));
     QFile::remove(tmp);
+    if (ok) waitForMySQL(20);
+#elif defined(Q_OS_WIN)
+    ok = runCmdElevated(QString("copy /Y \"%1\" \"%2\"")
+                        .arg(QString(tmp).replace('/', '\\'),
+                             QString(path).replace('/', '\\')));
+    QFile::remove(tmp);
+    if (ok) restartMySQL();
+#else
+    ok = runCmdElevated(QString("cp '%1' '%2' && chmod 644 '%2'").arg(tmp, path));
+    QFile::remove(tmp);
+    if (ok) restartMySQL();
+#endif
+
     if (!ok)
         return false;
-    waitForMySQL(20);
     return getCnfVar("secure_file_priv") == target;
-#else
-    if (getCnfVar("secure_file_priv") == target)
-        return true;   // déjà configuré : aucune élévation
-    if (!setMyCnfVar("secure_file_priv", target))
-        return false;
-    restartMySQL();
-    return getCnfVar("secure_file_priv") == target;
-#endif
 }
 
 //  Vérifie que mysql sait ÉCRIRE puis RELIRE un fichier dans /Users/Shared.
@@ -1549,27 +1556,6 @@ QString AppController::writeCnfToTemp(const QList<QPair<QString, QString>>& vars
     }
     out.close();
     return tmp;
-}
-
-bool AppController::setMyCnfVar(const QString& key, const QString& value)
-{
-    // Le fichier de conf appartient au système : on écrit le contenu dans un
-    // fichier temporaire, puis on le copie en place avec les droits administrateur.
-    const QString tmp = writeCnfToTemp({ qMakePair(key, value) });
-    if (tmp.isEmpty())
-        return false;
-    const QString path = getCnfPath();
-
-#if defined(Q_OS_WIN)
-    const QString src = QString(tmp).replace('/', '\\');
-    const QString dst = QString(path).replace('/', '\\');
-    const bool ok = runCmdElevated(QString("copy /Y \"%1\" \"%2\"").arg(src, dst));
-#else
-    const bool ok = runCmdElevated(
-        QString("cp '%1' '%2' && chmod 644 '%2'").arg(tmp, path));
-#endif
-    QFile::remove(tmp);
-    return ok;
 }
 
 QString AppController::getCnfPath()
