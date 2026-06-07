@@ -1133,22 +1133,33 @@ void AppController::restartMySQL()
 //  root et redémarre mysqld.
 bool AppController::ensureSecureFilePriv()
 {
-    const QString target  = sharedFolderPath();
-    const bool secureOk = (getCnfVar("secure_file_priv") == target);
+    const QString target = sharedFolderPath();
 
 #if defined(Q_OS_LINUX)
-    // Sous Ubuntu, le paquet MySQL met « bind-address = 127.0.0.1 » par défaut,
-    // ce qui bloque les connexions distantes (appareils de mesure). On force
-    // 0.0.0.0 (toutes les interfaces). secure_file_priv ET bind-address sont
-    // écrits ensemble puis le serveur redémarré, en UNE SEULE élévation (pkexec).
-    const QString bindVal = getCnfVar("bind-address");
-    const bool bindOk = (bindVal == "0.0.0.0" || bindVal == "*");
-    if (secureOk && bindOk)
-        return true;   // déjà configuré : aucune élévation
+    // Configuration de my.cnf requise par Rufus (procédure Rufus Linux). Toutes
+    // les variables sont écrites dans [mysqld] puis le serveur redémarré, en UNE
+    // SEULE élévation (pkexec) :
+    //   • secure_file_priv = dossier partagé (lecture/écriture des fichiers) ;
+    //   • sql_mode sans ONLY_FULL_GROUP_BY (sinon Rufus échoue) ;
+    //   • bind-address = * (accès distant ; apt met 127.0.0.1 par défaut) ;
+    //   • jeu de caractères utf8mb4 (textes médicaux accentués).
+    const QList<QPair<QString, QString>> vars = {
+        qMakePair(QStringLiteral("secure_file_priv"),     target),
+        qMakePair(QStringLiteral("sql_mode"),
+                  QStringLiteral("STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION")),
+        qMakePair(QStringLiteral("bind-address"),         QStringLiteral("*")),
+        qMakePair(QStringLiteral("character-set-server"), QStringLiteral("utf8mb4")),
+        qMakePair(QStringLiteral("collation-server"),     QStringLiteral("utf8mb4_general_ci")),
+    };
 
-    const QString tmp = writeCnfToTemp({
-        qMakePair(QStringLiteral("secure_file_priv"), target),
-        qMakePair(QStringLiteral("bind-address"),     QStringLiteral("0.0.0.0")) });
+    // Déjà toutes configurées ? → aucune élévation.
+    bool allOk = true;
+    for (const auto& kv : vars)
+        if (getCnfVar(kv.first) != kv.second) { allOk = false; break; }
+    if (allOk)
+        return true;
+
+    const QString tmp = writeCnfToTemp(vars);
     if (tmp.isEmpty())
         return false;
     const QString cnf = getCnfPath();
@@ -1161,7 +1172,7 @@ bool AppController::ensureSecureFilePriv()
     waitForMySQL(20);
     return getCnfVar("secure_file_priv") == target;
 #else
-    if (secureOk)
+    if (getCnfVar("secure_file_priv") == target)
         return true;   // déjà configuré : aucune élévation
     if (!setMyCnfVar("secure_file_priv", target))
         return false;

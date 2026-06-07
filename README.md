@@ -82,7 +82,7 @@ Tout le code spécifique est isolé par compilation conditionnelle
 | Service | `launchctl` / `brew services` | `net start/stop MySQL` | `systemctl … mysql` |
 | Dossier partagé | `/Users/Shared` (partage SMB) | `C:\Users\Public` (déjà partagé) | `/Users/Shared` (créé, AppArmor, `ufw allow 3306`, Samba **+ NT1/SMB1**, `wsdd`) |
 | Fichier de conf | `/etc/my.cnf` | `C:\ProgramData\MySQL\MySQL Server 8.4\my.ini` | `…/mysql.conf.d/mysqld.cnf` |
-| `secure_file_priv` / accès distant | `secure_file_priv` | `secure_file_priv` | `secure_file_priv` **+ `bind-address = 0.0.0.0`** (le paquet apt écoute sinon sur `127.0.0.1`) |
+| `secure_file_priv` / accès distant | `secure_file_priv` | `secure_file_priv` | `secure_file_priv`, `sql_mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION`, **`bind-address = *`**, `utf8mb4` (le paquet apt écoute sinon sur `127.0.0.1`) |
 | `PATH` | `/etc/paths.d/mysql` | `PATH` *Machine* (registre) | `/etc/profile.d/mysql.sh` |
 | Désinstallation | — | **entrée « Applications et fonctionnalités »** (registre `Uninstall` + script auto-élevant, taille affichée) | — |
 
