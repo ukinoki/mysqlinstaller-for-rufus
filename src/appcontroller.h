@@ -60,6 +60,12 @@ private:
     //  macOS : initialise /usr/local/mysql/data si le pkg Oracle ne l'a pas fait
     //  (cas MySQL 8.4.x). root@localhost sans mot de passe. No-op si déjà fait.
     bool    initOracleDataDir();
+    //  Fragment shell (root) idempotent : initialise le datadir Oracle s'il ne
+    //  l'est pas (mysqld --initialize-insecure, TMPDIR=/tmp) puis démarre le
+    //  serveur (LaunchDaemon, sinon mysql.server). Sortie ajoutée à m_initLog.
+    //  Partagé par installFromDmg() (fusionné à l'installateur → 1 seule invite)
+    //  et initOracleDataDir() (réparation/démarrage autonome).
+    QString oracleInitStartScript() const;
     //  Télécharge url -> dest avec barre de progression (vrai pourcentage).
     bool    downloadFile(const QString& url, const QString& dest,
                          const QString& label);

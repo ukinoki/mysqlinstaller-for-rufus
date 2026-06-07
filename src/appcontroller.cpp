@@ -901,19 +901,29 @@ bool AppController::installFromDmg(const QString& dmgPath)
         return false;
     }
 
-    // Script shell temporaire
+    // Journal d'init (réinitialisé ici : installation neuve).
+    { QFile f(m_initLog);
+      if (f.open(QIODevice::WriteOnly | QIODevice::Text))
+          QTextStream(&f) << "== installFromDmg : installer + init + start ==\n"
+                          << "pkg = " << pkgPath << "\n"; }
+
+    // Script shell temporaire : installateur PUIS init du datadir + démarrage du
+    // serveur, le tout dans la MÊME élévation → une seule invite de mot de passe
+    // (au lieu d'une pour le pkg et une pour l'init). Voir oracleInitStartScript().
     QString scriptPath = QDir::tempPath() + "/mysql_oracle_install.sh";
     {
         QFile s(scriptPath);
         s.open(QIODevice::WriteOnly | QIODevice::Text);
         QTextStream ts(&s);
-        ts << "#!/bin/sh\n" << "installer -pkg '" << pkgPath << "' -target /\n";
+        ts << "#!/bin/sh\n"
+           << "installer -pkg '" << pkgPath << "' -target /\n"
+           << oracleInitStartScript();
     }
     runCmd("chmod +x '" + scriptPath + "'");
 
     // Installation avec élévation
     ProgressDialog* dlg = new ProgressDialog(
-        tr("Installation de MySQL en cours…\n"
+        tr("Installation et configuration de MySQL…\n"
            "(Autorisez l'opération dans la fenêtre qui s'affiche)"));
     dlg->show();
     QApplication::processEvents();
@@ -934,105 +944,78 @@ bool AppController::installFromDmg(const QString& dmgPath)
     QFile::remove(scriptPath);
     runCmd(QString("hdiutil detach '%1' -force 2>/dev/null").arg(volumePath));
     QFile::remove(dmgPath);
+
+    waitForMySQL(20);             // le script a aussi initialisé et démarré le serveur
     return isOracleInstall();
 }
 
-// Depuis MySQL 8.4.x, le pkg Oracle pour macOS n'initialise plus automatiquement
-// le répertoire de données : tant que /usr/local/mysql/data n'est pas initialisé,
-// mysqld refuse de démarrer (le panneau « Réglages Système ▸ MySQL » propose alors
-// de le faire à la main, avec invite de mot de passe). On l'initialise donc nous-
-// mêmes, en mode « insecure » → root@localhost SANS mot de passe, ce que
-// createUser() suppose. No-op si la base est déjà initialisée (mise à jour : on ne
-// touche pas aux données existantes).
+// Fragment shell (exécuté en ROOT) qui, depuis MySQL 8.4.x, supplée le pkg Oracle
+// macOS — lequel n'initialise plus automatiquement /usr/local/mysql/data (sans quoi
+// mysqld refuse de démarrer ; le panneau « Réglages Système ▸ MySQL » propose sinon
+// de le faire à la main avec invite). Idempotent : si le datadir est déjà
+// initialisé (mysql.ibd présent), on ne le réinitialise pas (données préservées),
+// on se contente de démarrer le serveur. Conçu pour être CONCATÉNÉ à l'installateur
+// (installFromDmg → une seule invite) ou exécuté seul (initOracleDataDir).
+QString AppController::oracleInitStartScript() const
+{
+    return QStringLiteral(
+        "PREFIX=/usr/local/mysql; DATA=\"$PREFIX/data\"\n"
+        // Compte exécutant mysqld : « _mysql » (créé par le pkg), repli « mysql ».
+        "OWNER=$(id -u _mysql >/dev/null 2>&1 && echo _mysql || echo mysql)\n"
+        "{\n"
+        "  echo \"-- init+start (owner=$OWNER) --\"\n"
+        "  if [ ! -f \"$DATA/mysql.ibd\" ]; then\n"
+        "    id \"$OWNER\" || echo \"(compte $OWNER introuvable)\"\n"
+        "    rm -rf \"$DATA\"; mkdir -p \"$DATA\"; chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
+        // TMPDIR de session = /var/folders/<user>/T (privé, inaccessible à _mysql →
+        // InnoDB échoue errno 13). On force /tmp (sticky) pour l'env ET via --tmpdir.
+        // --no-defaults ignore tout /etc/my.cnf résiduel qui ferait échouer l'init.
+        "    export TMPDIR=/tmp\n"
+        "    \"$PREFIX/bin/mysqld\" --no-defaults --initialize-insecure "
+        "--user=\"$OWNER\" --basedir=\"$PREFIX\" --datadir=\"$DATA\" --tmpdir=/tmp\n"
+        "    echo \"mysqld --initialize rc=$?\"\n"
+        "    chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
+        "  else\n"
+        "    echo 'datadir déjà initialisé'\n"
+        "  fi\n"
+        // Démarrage (root) : LaunchDaemon si présent (persiste au redémarrage),
+        // sinon mysql.server (TMPDIR=/tmp en renfort contre l'errno 13).
+        "  PLIST=/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist\n"
+        "  if [ -f \"$PLIST\" ]; then echo '-- launchctl load --'; launchctl load -w \"$PLIST\"; "
+        "else echo '-- mysql.server start --'; TMPDIR=/tmp \"$PREFIX/support-files/mysql.server\" start; fi\n"
+        "} >> '%1' 2>&1\n"
+        "chmod 644 '%1' 2>/dev/null\n").arg(m_initLog);
+}
+
+// Initialise (si besoin) le datadir Oracle PUIS démarre le serveur, en UNE élévation
+// (osascript admin). Utilisé pour réparer/démarrer une installation déjà présente
+// (startMySQL) ; lors d'une installation neuve, ce travail est fusionné dans le
+// script de installFromDmg (pas d'invite séparée).
 bool AppController::initOracleDataDir()
 {
     const QString prefix = oraclePrefix();          // /usr/local/mysql (ou vide)
+    const QString data   = prefix + "/data";
 
-    // Compte système exécutant mysqld : « _mysql » sur macOS (créé par le pkg) ;
-    // repli sur « mysql » si absent.
-    const QString owner =
-        runCmd("id -u _mysql >/dev/null 2>&1 && echo _mysql || echo mysql").trimmed();
-    const QString data = prefix + "/data";
-
-    // Journal créé IMMÉDIATEMENT, côté non élevé, pour qu'il existe toujours (même
-    // si l'on s'arrête avant l'élévation). Le script root le complétera ensuite.
-    auto logLine = [this](const QString& s) {
-        QFile f(m_initLog);
-        if (f.open(QIODevice::Append | QIODevice::Text))
-            QTextStream(&f) << s << '\n';
-    };
+    // Préambule de journal (côté non élevé) : le fichier existe toujours, même si
+    // l'on s'arrête avant l'élévation.
     {
         QFile f(m_initLog);
-        if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            QTextStream ts(&f);
-            ts << "== initOracleDataDir ==\n"
-               << "prefix = " << (prefix.isEmpty() ? "(vide)" : prefix) << "\n"
-               << "owner  = " << owner << "\n"
-               << "data   = " << data << "\n";
-        }
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text))
+            QTextStream(&f) << "== initOracleDataDir ==\n"
+                            << "prefix = " << (prefix.isEmpty() ? "(vide)" : prefix) << "\n";
     }
-
     if (prefix.isEmpty()) {
-        logLine("ERREUR : /usr/local/mysql/bin/mysql introuvable "
-                "(oraclePrefix vide) — le pkg Oracle n'a pas été détecté.");
+        QFile f(m_initLog);
+        if (f.open(QIODevice::Append | QIODevice::Text))
+            QTextStream(&f) << "ERREUR : /usr/local/mysql/bin/mysql introuvable "
+                               "(pkg Oracle non détecté).\n";
         return false;
     }
 
-    // Déjà initialisé ? mysql.ibd (dictionnaire de données InnoDB) est présent dès
-    // l'initialisation en MySQL 8.x.
-    if (QFileInfo::exists(data + "/mysql.ibd")) {
-        logLine("Déjà initialisé (mysql.ibd présent) — rien à faire.");
-        return true;
-    }
+    runCmdElevated(oracleInitStartScript());
 
-    // Script élevé (une seule invite admin via osascript). On prépare un datadir
-    // vide appartenant au compte mysql, puis on initialise sans mot de passe.
-    //  - --no-defaults : ignore tout /etc/my.cnf résiduel qui ferait échouer l'init.
-    //  - sortie ajoutée (>>) à m_initLog pour diagnostic.
-    const QString script = QStringLiteral(
-        "PREFIX='%1'; DATA='%2'; OWNER='%3'; LOG='%4'\n"
-        "{\n"
-        "  echo '-- script root --'\n"
-        "  id \"$OWNER\" || echo \"(compte $OWNER introuvable)\"\n"
-        "  ls -ld \"$PREFIX\" \"$PREFIX/bin/mysqld\"\n"
-        "  rm -rf \"$DATA\"\n"
-        "  mkdir -p \"$DATA\"\n"
-        "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
-        // TMPDIR hérité de la session pointe vers /var/folders/<user>/T (privé,
-        // inaccessible à _mysql → InnoDB échoue errno 13). On force /tmp (sticky,
-        // inscriptible par tous) pour l'environnement ET via --tmpdir.
-        "  export TMPDIR=/tmp\n"
-        "  \"$PREFIX/bin/mysqld\" --no-defaults --initialize-insecure "
-        "--user=\"$OWNER\" --basedir=\"$PREFIX\" --datadir=\"$DATA\" --tmpdir=/tmp\n"
-        "  echo \"mysqld --initialize rc=$?\"\n"
-        "  chown -R \"$OWNER\":\"$OWNER\" \"$DATA\"\n"
-        // Démarrage du serveur DANS le même contexte root (sinon il faudrait une
-        // 2e invite) : démon launchd si présent (persiste au redémarrage), sinon
-        // mysql.server. TMPDIR reste /tmp pour le serveur ainsi lancé.
-        "  PLIST=/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist\n"
-        "  if [ -f \"$PLIST\" ]; then\n"
-        "    echo \"-- launchctl load $PLIST --\"\n"
-        "    launchctl load -w \"$PLIST\"\n"
-        "  else\n"
-        "    echo \"-- mysql.server start --\"\n"
-        "    \"$PREFIX/support-files/mysql.server\" start\n"
-        "  fi\n"
-        "} >> \"$LOG\" 2>&1\n"
-        "chmod 644 \"$LOG\" 2>/dev/null\n")
-        .arg(prefix, data, owner, m_initLog);
-
-    const bool elevated = runCmdElevated(script);
-    if (!elevated)
-        logLine("ATTENTION : l'élévation (osascript admin) a été annulée ou a échoué.");
-
-    // Succès = le dictionnaire de données a bien été créé.
     const bool ok = QFileInfo::exists(data + "/mysql.ibd");
-    if (ok) {
-        // Le script root a aussi démarré le serveur : on patiente qu'il accepte
-        // les connexions, pour que startMySQL() le voie déjà actif (pas de 2e invite).
-        logLine("Initialisation OK — attente du démarrage du serveur…");
-        waitForMySQL(20);
-    }
+    if (ok) waitForMySQL(20);            // le script root a démarré le serveur
     return ok;
 }
 
@@ -1238,12 +1221,13 @@ bool AppController::installMySQL()
 #else
     QString dmg = downloadOracleDmg();
     if (dmg.isEmpty()) return false;
+    // installFromDmg installe le pkg PUIS initialise le datadir et démarre le
+    // serveur dans la même élévation (MySQL 8.4.x n'initialise plus le datadir).
     if (!installFromDmg(dmg)) return false;
 
-    // MySQL 8.4.x : le pkg n'initialise plus le datadir → on le fait nous-mêmes,
-    // sinon le serveur ne démarrera pas et createUser() échouera.
-    if (!initOracleDataDir()) {
-        // Joindre la fin du journal mysqld pour rendre la cause diagnosticable.
+    // L'init a-t-elle réussi ? (mysql.ibd = dictionnaire de données InnoDB.)
+    if (!QFileInfo::exists("/usr/local/mysql/data/mysql.ibd")) {
+        // Joindre la fin du journal pour rendre la cause diagnosticable.
         QString detail;
         QFile lf(m_initLog);
         if (lf.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -1273,19 +1257,10 @@ bool AppController::startMySQL()
     runCmdElevated("systemctl start mysql");
 #else
     if (isOracleInstall()) {
-        // MySQL 8.4.x : le pkg Oracle n'initialise plus le datadir. L'init (élevée)
-        // le fait ET démarre le serveur ; s'il tourne déjà après ça, terminé (no-op
-        // si déjà initialisé : données existantes intactes).
-        if (initOracleDataDir() && isServerRunning())
-            return true;
-        // Démarrage du démon système macOS : exige root → élévation (sinon
-        // « launchctl load » d'un LaunchDaemon échoue silencieusement).
-        QString plist = "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist";
-        if (QFile::exists(plist))
-            runCmdElevated(QString("launchctl load -w '%1'").arg(plist));
-        else
-            runCmdElevated("TMPDIR=/tmp "
-                           "/usr/local/mysql/support-files/mysql.server start");
+        // Démon système macOS : démarrage (et init du datadir si nécessaire, cas
+        // MySQL 8.4.x) en UNE élévation idempotente. initOracleDataDir() ne réinit
+        // pas un datadir existant (données préservées) et charge le LaunchDaemon.
+        initOracleDataDir();
     } else {
         runCmdFull("brew services start mysql@8.4 2>&1", 15000);
     }
