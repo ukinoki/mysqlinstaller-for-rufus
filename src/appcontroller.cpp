@@ -1385,7 +1385,7 @@ bool AppController::setupSharedFolder()
     // Si tout est en place, on s'arrête là — cas typique d'une machine déjà
     // paramétrée pour Rufus, où l'on ne veut PAS redemander le mot de passe.
     auto alreadyConfigured = [&]() -> bool {
-        if (!QDir(path).exists())
+        if (!QDir(path + "/Rufus/Imagerie").exists())
             return false;
         QFile aa("/etc/apparmor.d/local/usr.sbin.mysqld");
         if (!aa.open(QIODevice::ReadOnly | QIODevice::Text)
@@ -1409,14 +1409,16 @@ bool AppController::setupSharedFolder()
         return true;
 
     // Sinon, tout le paramétrage privilégié en une seule élévation (pkexec) :
-    //   • créer /Users/Shared, propriétaire = utilisateur courant ;
+    //   • créer /Users/Shared/Rufus/Imagerie, droits 755, propriétaire = user ;
     //   • AppArmor : autoriser mysqld à accéder au dossier ;
     //   • ouvrir le port 3306 (ufw) ;
     //   • installer Samba si besoin et partager le dossier sur le réseau ;
     //   • installer wsdd pour rendre le partage visible sous Windows 10/11.
     const QString user = runCmd("id -un 2>/dev/null").trimmed();
     const QString script = QString(
-        "mkdir -p '%1'; chown %2 '%1'; chmod 0775 '%1'; "
+        // Création de l'arborescence Rufus + droits (cf. procédure Rufus Linux) :
+        // chmod -R 755 sur le dossier partagé, chown -R sur tout /Users.
+        "mkdir -p '%1/Rufus/Imagerie'; chmod -R 755 '%1'; chown -R %2 /Users; "
         // — AppArmor : ne pas bloquer mysqld sur le dossier partagé —
         "mkdir -p /etc/apparmor.d/local; "
         "touch /etc/apparmor.d/local/usr.sbin.mysqld; "
