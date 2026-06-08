@@ -450,7 +450,7 @@ void AppController::run()
     m_dialog->show();
     QApplication::processEvents();         // forcer l'affichage avant les contrôles
 
-    const bool installed = isMySQLInstalled();
+    bool installed = isMySQLInstalled();   // passe à false après un nettoyage de MAJ
 
     // Config distante (version cible + seuil minimal). Le dialogue affiche le
     // seuil dans le libellé de la case « MySQL ≥ <min> installé ».
@@ -469,21 +469,34 @@ void AppController::run()
             m_freshInstall = false;
             if (!isServerRunning()) startMySQL();
         } else {
-            // Version trop ancienne : dialogue de MAJ nécessaire, avec conseil de
-            // sauvegarde. Un clic sur OK fait passer le programme en mode Create.
-            // On bascule la fiche en mode Create AVANT la boîte de dialogue : la
-            // transition se fait cachée derrière la boîte modale (pas de
-            // scintillement à sa fermeture).
+            // Version trop ancienne : on PROPOSE un NETTOYAGE COMPLET (entre
+            // versions majeures, réinstaller par-dessus laisse un datadir absent
+            // ou incompatible). askUpdateConfirmation() avertit de la perte des
+            // données. On bascule en mode Create AVANT la boîte (transition masquée).
             m_dialog->setMode(CredentialsDialog::Mode::Create);
             if (!askUpdateConfirmation(ver, cfg.version)) {
                 qApp->quit(); return;
             }
-            needInstall = true;
+            // Nettoyage complet de l'ancienne installation.
+            ProgressDialog* clean = new ProgressDialog(
+                tr("Nettoyage de l'ancienne installation de MySQL…"));
+            clean->show();
+            QApplication::processEvents();
+            uninstallMySQL();
+            clean->close();
+            delete clean;
+            // Fin de désinstallation : message SANS « le programme va se fermer »
+            // (on enchaîne sur l'installation). MySQL est désormais absent → on
+            // converge vers la branche d'installation ci-dessous.
+            QMessageBox::information(m_dialog, tr("Désinstallation terminée"),
+                tr("MySQL a été désinstallé de cet ordinateur."));
+            installed = false;
         }
-    } else {
-        // ── MySQL absent : demander la permission d'installer ─────────────────
-        // Bascule en mode Create AVANT la boîte (transition masquée par la boîte
-        // modale → pas de scintillement).
+    }
+
+    if (!installed) {
+        // ── MySQL absent (jamais installé, OU désinstallé pour la mise à jour) :
+        //    demander la permission d'installer. La fiche est en mode Create. ──
         m_dialog->setMode(CredentialsDialog::Mode::Create);
         // Le numéro de version n'est annoncé que là où le programme installe une
         // version précise (Windows/macOS = 8.4.9). Sous Linux, c'est apt qui
@@ -522,21 +535,6 @@ void AppController::run()
         if (!checkDownloadConnectivity(dlUrl)) {
             qApp->quit();
             return;
-        }
-
-        // Cas MISE À JOUR : entre versions majeures, réinstaller par-dessus peut
-        // laisser un répertoire de données absent ou incompatible (échec de
-        // démarrage). On effectue donc un NETTOYAGE COMPLET de l'ancienne
-        // installation avant de réinstaller proprement — l'utilisateur a confirmé,
-        // via askUpdateConfirmation(), que ses données sont sauvegardées.
-        if (installed) {
-            ProgressDialog* clean = new ProgressDialog(
-                tr("Nettoyage de l'ancienne installation de MySQL…"));
-            clean->show();
-            QApplication::processEvents();
-            uninstallMySQL();
-            clean->close();
-            delete clean;
         }
 
         if (!installMySQL()) {
@@ -730,8 +728,11 @@ void AppController::onUninstallRequested()
     delete dlg;
 
     if (ok && !isMySQLInstalled()) {
+        // Désinstallation MANUELLE (bouton, mode Verify) : on prévient que le
+        // programme va se fermer, puis on le ferme.
         QMessageBox::information(m_dialog, tr("Désinstallation terminée"),
-            tr("MySQL a été désinstallé de cet ordinateur."));
+            tr("MySQL a été désinstallé de cet ordinateur.\n\n"
+               "Le programme va se fermer."));
         m_dialog->accept();
         qApp->quit();
     } else {
