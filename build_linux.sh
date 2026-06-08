@@ -124,10 +124,10 @@ if [ -n "$APPIMAGE" ]; then
     mv -f "$APPIMAGE" "$ROOT/dist/"
     echo
     echo "✅ AppImage prête : dist/$(basename "$APPIMAGE")"
-    echo "   Lancement direct       : chmod +x puis ./dist/*.AppImage"
-    echo "   Installation (menu)     : ./dist/*.AppImage --install   (équivalent setup.exe)"
-    echo "   Désinstallation (menu)  : ./dist/*.AppImage --uninstall"
-    echo "   Rappel : l'application demande le mot de passe via pkexec au besoin."
+    echo "   1) rendre exécutable : chmod +x ./dist/*.AppImage"
+    echo "   2) double-clic → une fenêtre propose d'ajouter l'app au menu (setup.exe-like)"
+    echo "   (avancé : ./dist/*.AppImage --install / --uninstall en ligne de commande)"
+    echo "   Rappel : libfuse2 requis pour lancer une AppImage (sudo apt install libfuse2)."
 else
     echo "⚠️  Aucune AppImage produite — voir la sortie de linuxdeploy ci-dessus." >&2
     exit 1

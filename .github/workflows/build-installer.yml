@@ -219,13 +219,15 @@ jobs:
             > « Exécuter quand même » (exe non encore signé Authenticode).
 
             ### Linux (Ubuntu ≥ 22.04)
-            **Un seul fichier à télécharger** : l'AppImage s'installe elle-même.
-            `sudo apt install libfuse2` (une fois), puis `chmod +x *.AppImage`, puis :
-            - **Lancement direct** : double-clic sur l'AppImage.
-            - **Installation dans le menu** (équivalent setup.exe) :
-              `./*.AppImage --install` — l'app apparaît dans le menu des applications.
-              (Désinstaller : `./*.AppImage --uninstall`.)
-            > L'application demande le mot de passe via pkexec au besoin.
+            **Un seul fichier à télécharger**, qui s'installe tout seul.
+            1. `sudo apt install libfuse2` (une seule fois, pré-requis AppImage).
+            2. Rendez le fichier exécutable : clic droit ▸ Propriétés ▸ Permissions ▸
+               « Autoriser l'exécution » (ou `chmod +x *.AppImage`).
+            3. **Double-cliquez** : une fenêtre propose d'**ajouter l'application au
+               menu** (comme un `setup.exe`). Cliquez « Oui » → elle apparaît dans le
+               menu des applications.
+            > Utilisateur avancé : `./*.AppImage --install` / `--uninstall` en ligne
+            > de commande. L'application demande le mot de passe via pkexec au besoin.
 
             ### macOS (Intel + Apple Silicon)
             Ouvrez `MySQLInstaller_macOS_Universal.dmg` (binaire **universel**,

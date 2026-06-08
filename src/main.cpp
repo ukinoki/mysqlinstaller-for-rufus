@@ -15,31 +15,45 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Intégration au bureau Linux (équivalent du setup.exe / DMG) : l'AppImage SAIT
-//  s'installer elle-même dans le menu, ce qui évite de distribuer un second
-//  fichier (plus de install_appimage.sh). Lancée via :
-//      ./MySQLInstaller-x86_64.AppImage --install     (intègre au menu)
-//      ./MySQLInstaller-x86_64.AppImage --uninstall   (retire du menu)
-//  Tout se fait dans ~/.local (aucun droit root). Traitée AVANT QApplication :
-//  aucune interface graphique requise pour (dés)installer.
-//    1. copie l'AppImage → ~/.local/bin/MySQLInstaller ;
-//    2. installe l'icône 256×256 (ressource embarquée) ;
-//    3. crée le raccourci .desktop (l'app apparaît dans le menu).
-static int linuxDesktopIntegration(bool install)
+//  s'installer elle-même dans le menu, sans distribuer de second fichier.
+//  Deux portes d'entrée vers le MÊME cœur (desktopIntegrationCore) :
+//    • béotien : au DOUBLE-CLIC, si pas encore installée, une fenêtre propose
+//      « Ajouter au menu ? » (voir offerDesktopIntegration, après QApplication) ;
+//    • avancé  : en ligne de commande, « --install » / « --uninstall ».
+//  Cœur : copie l'AppImage → ~/.local/bin, pose l'icône 256×256 et le raccourci
+//  .desktop (ou les retire). Tout dans ~/.local, aucun droit root.
+static const QString kAppId    = QStringLiteral("MySQLInstaller");
+static const QString kNiceName = QStringLiteral("MySQL Installer for Rufus");
+
+static QString linuxDesktopFile()
 {
     const QString home = qEnvironmentVariable("HOME");
-    if (home.isEmpty()) { std::fprintf(stderr, "HOME non défini.\n"); return 1; }
+    return home.isEmpty() ? QString()
+        : home + "/.local/share/applications/" + kAppId + ".desktop";
+}
 
-    const QString appId    = QStringLiteral("MySQLInstaller");
-    const QString niceName = QStringLiteral("MySQL Installer for Rufus");
+// L'app tourne-t-elle comme une AppImage téléchargée, PAS encore intégrée au menu ?
+static bool appImageNotIntegrated()
+{
+    return !qEnvironmentVariable("APPIMAGE").isEmpty()
+        && !linuxDesktopFile().isEmpty()
+        && !QFile::exists(linuxDesktopFile());
+}
+
+static bool desktopIntegrationCore(bool install)
+{
+    const QString home = qEnvironmentVariable("HOME");
+    if (home.isEmpty()) return false;
+
     const QString binDir   = home + "/.local/bin";
     const QString appsDir  = home + "/.local/share/applications";
     const QString iconDir  = home + "/.local/share/icons/hicolor/256x256/apps";
-    const QString binPath  = binDir  + "/" + appId;
-    const QString deskPath = appsDir + "/" + appId + ".desktop";
-    const QString iconPath = iconDir + "/" + appId + ".png";
+    const QString binPath  = binDir  + "/" + kAppId;
+    const QString deskPath = appsDir + "/" + kAppId + ".desktop";
+    const QString iconPath = iconDir + "/" + kAppId + ".png";
 
     // Rafraîchissement best-effort des caches (menu + icônes). std::system évite
-    // toute dépendance à une boucle d'événements Qt (on est avant QApplication).
+    // toute dépendance à une boucle d'événements Qt.
     auto refresh = [&] {
         std::system(("update-desktop-database '" + appsDir + "' 2>/dev/null").toLocal8Bit().constData());
         std::system(("gtk-update-icon-cache '" + home
@@ -51,17 +65,13 @@ static int linuxDesktopIntegration(bool install)
         QFile::remove(deskPath);
         QFile::remove(iconPath);
         refresh();
-        std::printf("OK - \"%s\" retire du menu.\n", qPrintable(niceName));
-        return 0;
+        return true;
     }
 
     // $APPIMAGE = chemin du fichier .AppImage, fourni par le runtime AppImage.
     const QString appImage = qEnvironmentVariable("APPIMAGE");
-    if (appImage.isEmpty()) {
-        std::fprintf(stderr, "--install doit etre lance depuis l'AppImage "
-                             "(variable APPIMAGE absente).\n");
-        return 1;
-    }
+    if (appImage.isEmpty())
+        return false;
 
     QDir().mkpath(binDir);
     QDir().mkpath(appsDir);
@@ -69,10 +79,8 @@ static int linuxDesktopIntegration(bool install)
 
     // 1. Copier l'AppImage → ~/.local/bin/MySQLInstaller (rendue exécutable).
     QFile::remove(binPath);
-    if (!QFile::copy(appImage, binPath)) {
-        std::fprintf(stderr, "Echec de la copie de l'AppImage.\n");
-        return 1;
-    }
+    if (!QFile::copy(appImage, binPath))
+        return false;
     QFile::setPermissions(binPath,
         QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
         QFileDevice::ReadGroup | QFileDevice::ExeGroup |
@@ -89,36 +97,48 @@ static int linuxDesktopIntegration(bool install)
         ts << "[Desktop Entry]\n"
               "Type=Application\n"
               "Version=1.0\n"
-              "Name=" << niceName << "\n"
+              "Name=" << kNiceName << "\n"
               "GenericName=Configuration du serveur MySQL pour Rufus\n"
               "Comment=Installe et configure MySQL pour le logiciel medical Rufus\n"
               "Exec=" << binPath << "\n"
-              "Icon=" << appId << "\n"
+              "Icon=" << kAppId << "\n"
               "Terminal=false\n"
               "Categories=System;Utility;Database;\n"
               "Keywords=MySQL;Rufus;serveur;database;\n";
+    } else {
+        return false;
     }
     QFile::setPermissions(deskPath,
         QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
         QFileDevice::ReadGroup | QFileDevice::ReadOther);
 
     refresh();
-    std::printf("OK - \"%s\" installe. Cherchez-le dans le menu des applications.\n"
-                "     (Desinstaller : relancez l'AppImage avec --uninstall.)\n",
-                qPrintable(niceName));
-    return 0;
+    return true;
+}
+
+// Ligne de commande (utilisateur avancé / scripts). Renvoie un code de sortie.
+static int linuxDesktopIntegrationCli(bool install)
+{
+    const bool ok = desktopIntegrationCore(install);
+    if (install)
+        std::printf(ok ? "OK - \"%s\" installe (menu des applications).\n"
+                       : "Echec de l'installation de \"%s\".\n", qPrintable(kNiceName));
+    else
+        std::printf(ok ? "OK - \"%s\" retire du menu.\n"
+                       : "Echec de la desinstallation de \"%s\".\n", qPrintable(kNiceName));
+    return ok ? 0 : 1;
 }
 #endif  // Q_OS_LINUX
 
 int main(int argc, char* argv[])
 {
 #if defined(Q_OS_LINUX)
-    // (Dés)intégration au menu demandée en ligne de commande : traitée avant toute
-    // initialisation graphique, puis on sort (l'AppImage fait office d'installeur).
+    // (Dés)intégration au menu demandée EN LIGNE DE COMMANDE (utilisateur avancé) :
+    // traitée avant toute initialisation graphique, puis on sort.
     for (int i = 1; i < argc; ++i) {
         const QByteArray a(argv[i]);
-        if (a == "--install")   return linuxDesktopIntegration(true);
-        if (a == "--uninstall") return linuxDesktopIntegration(false);
+        if (a == "--install")   return linuxDesktopIntegrationCli(true);
+        if (a == "--uninstall") return linuxDesktopIntegrationCli(false);
     }
 #endif
 
@@ -129,6 +149,36 @@ int main(int argc, char* argv[])
 
     // Icône MySQL appliquée à toutes les fenêtres et boîtes de dialogue
     app.setWindowIcon(QIcon(":/mysql.png"));
+
+#if defined(Q_OS_LINUX)
+    // ── Accueil béotien : double-clic sur l'AppImage non encore installée ──────
+    //  Sans rien taper, une fenêtre propose d'ajouter l'application au menu
+    //  (équivalent du setup.exe / DMG). Une fois installée (raccourci .desktop
+    //  présent), ce message ne réapparaît plus : l'app démarre directement.
+    if (appImageNotIntegrated()) {
+        const auto rep = QMessageBox::question(nullptr,
+            QCoreApplication::translate("main", "Installer dans le menu ?"),
+            QCoreApplication::translate("main",
+                "Voulez-vous ajouter « MySQL Installer for Rufus » au menu des "
+                "applications ?\n\nVous pourrez ensuite le lancer comme un logiciel "
+                "installé, sans repasser par ce fichier."),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+        if (rep == QMessageBox::Yes) {
+            if (desktopIntegrationCore(true))
+                QMessageBox::information(nullptr,
+                    QCoreApplication::translate("main", "Installation terminée"),
+                    QCoreApplication::translate("main",
+                        "« MySQL Installer for Rufus » a été ajouté au menu des "
+                        "applications.\n\nL'application va maintenant démarrer."));
+            else
+                QMessageBox::warning(nullptr,
+                    QCoreApplication::translate("main", "Installation incomplète"),
+                    QCoreApplication::translate("main",
+                        "L'ajout au menu n'a pas pu être effectué.\n"
+                        "L'application va tout de même démarrer."));
+        }
+    }
+#endif
 
     // ── Instance unique ───────────────────────────────────────────────────
     //  Empêche le lancement de deux exemplaires en parallèle. QLockFile gère le

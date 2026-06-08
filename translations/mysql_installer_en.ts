@@ -586,32 +586,72 @@ The confirmation must match the password.</translation>
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/main.cpp" line="27"/>
+        <location filename="../src/main.cpp" line="160"/>
+        <source>Installer dans le menu ?</source>
+        <translation>Add to the menu?</translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="161"/>
+        <source>Voulez-vous ajouter « MySQL Installer for Rufus » au menu des applications ?
+
+Vous pourrez ensuite le lancer comme un logiciel installé, sans repasser par ce fichier.</source>
+        <translation>Do you want to add “MySQL Installer for Rufus” to the applications menu?
+
+You will then be able to launch it like an installed program, without going through this file again.</translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="169"/>
+        <source>Installation terminée</source>
+        <translation>Installation complete</translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="170"/>
+        <source>« MySQL Installer for Rufus » a été ajouté au menu des applications.
+
+L&apos;application va maintenant démarrer.</source>
+        <translation>“MySQL Installer for Rufus” has been added to the applications menu.
+
+The application will now start.</translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="175"/>
+        <source>Installation incomplète</source>
+        <translation>Incomplete installation</translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="176"/>
+        <source>L&apos;ajout au menu n&apos;a pas pu être effectué.
+L&apos;application va tout de même démarrer.</source>
+        <translation>Adding to the menu could not be completed.
+The application will start anyway.</translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="190"/>
         <source>Application déjà lancée</source>
         <translation>Application already running</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="28"/>
+        <location filename="../src/main.cpp" line="191"/>
         <source>MySQL Installer est déjà en cours d&apos;exécution.
 Une seule instance peut s&apos;exécuter à la fois.</source>
         <translation>MySQL Installer is already running.
 Only one instance can run at a time.</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="39"/>
-        <location filename="../src/main.cpp" line="50"/>
+        <location filename="../src/main.cpp" line="202"/>
+        <location filename="../src/main.cpp" line="213"/>
         <source>Système non compatible</source>
         <translation>Incompatible System</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="40"/>
+        <location filename="../src/main.cpp" line="203"/>
         <source>Ce programme nécessite macOS Monterey (12.0) ou une version ultérieure.
 Version détectée : %1.</source>
         <translation>This program requires macOS Monterey (12.0) or later.
 Detected version: %1.</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="51"/>
+        <location filename="../src/main.cpp" line="214"/>
         <source>Ce programme nécessite Windows 10 ou Windows 11.
 Version détectée : %1.</source>
         <translation>This program requires Windows 10 or Windows 11.

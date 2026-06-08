@@ -532,30 +532,65 @@ La confirmation doit être identique au mot de passe.</source>
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/main.cpp" line="27"/>
+        <location filename="../src/main.cpp" line="160"/>
+        <source>Installer dans le menu ?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="161"/>
+        <source>Voulez-vous ajouter « MySQL Installer for Rufus » au menu des applications ?
+
+Vous pourrez ensuite le lancer comme un logiciel installé, sans repasser par ce fichier.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="169"/>
+        <source>Installation terminée</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="170"/>
+        <source>« MySQL Installer for Rufus » a été ajouté au menu des applications.
+
+L&apos;application va maintenant démarrer.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="175"/>
+        <source>Installation incomplète</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="176"/>
+        <source>L&apos;ajout au menu n&apos;a pas pu être effectué.
+L&apos;application va tout de même démarrer.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/main.cpp" line="190"/>
         <source>Application déjà lancée</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="28"/>
+        <location filename="../src/main.cpp" line="191"/>
         <source>MySQL Installer est déjà en cours d&apos;exécution.
 Une seule instance peut s&apos;exécuter à la fois.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="39"/>
-        <location filename="../src/main.cpp" line="50"/>
+        <location filename="../src/main.cpp" line="202"/>
+        <location filename="../src/main.cpp" line="213"/>
         <source>Système non compatible</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="40"/>
+        <location filename="../src/main.cpp" line="203"/>
         <source>Ce programme nécessite macOS Monterey (12.0) ou une version ultérieure.
 Version détectée : %1.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="51"/>
+        <location filename="../src/main.cpp" line="214"/>
         <source>Ce programme nécessite Windows 10 ou Windows 11.
 Version détectée : %1.</source>
         <translation type="unfinished"></translation>
