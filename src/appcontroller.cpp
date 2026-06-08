@@ -524,10 +524,20 @@ void AppController::run()
             return;
         }
 
-        // Cas mise à jour : arrêter l'ancien serveur avant la réinstallation
-        // (sous Windows installMySQL() le refait, mais c'est nécessaire sur
-        // macOS/Linux où l'installeur écrit par-dessus une instance active).
-        if (installed) stopMySQL();
+        // Cas MISE À JOUR : entre versions majeures, réinstaller par-dessus peut
+        // laisser un répertoire de données absent ou incompatible (échec de
+        // démarrage). On effectue donc un NETTOYAGE COMPLET de l'ancienne
+        // installation avant de réinstaller proprement — l'utilisateur a confirmé,
+        // via askUpdateConfirmation(), que ses données sont sauvegardées.
+        if (installed) {
+            ProgressDialog* clean = new ProgressDialog(
+                tr("Nettoyage de l'ancienne installation de MySQL…"));
+            clean->show();
+            QApplication::processEvents();
+            uninstallMySQL();
+            clean->close();
+            delete clean;
+        }
 
         if (!installMySQL()) {
             // installMySQL() affiche déjà un message détaillé en cas d'échec.
@@ -694,11 +704,12 @@ void AppController::onUninstallRequested()
     // Avertissement fort : opération destructive (supprime les bases MySQL).
     QMessageBox box(QMessageBox::Warning,
         tr("Désinstaller MySQL ?"),
-        tr("Cette opération va DÉSINSTALLER MySQL et SUPPRIMER toutes ses bases de "
-           "données, y compris les données gérées par Rufus.\n\n"
-           "C'est IRRÉVERSIBLE : assurez-vous d'avoir une sauvegarde.\n\n"
-           "(Le dossier partagé et les fichiers qu'il contient ne sont pas "
-           "supprimés.)\n\nVoulez-vous continuer ?"),
+        tr("⚠️ TOUTES VOS DONNÉES SERONT DÉFINITIVEMENT PERDUES si vous continuez.\n\n"
+           "Cette opération désinstalle MySQL et supprime toutes ses bases de "
+           "données, y compris les données gérées par Rufus. C'est IRRÉVERSIBLE.\n\n"
+           "FAITES UNE SAUVEGARDE de vos données avant de poursuivre.\n\n"
+           "(Le dossier partagé et les fichiers qu'il contient, eux, ne sont pas "
+           "supprimés.)\n\nVoulez-vous vraiment continuer ?"),
         QMessageBox::NoButton, m_dialog);
     QPushButton* go = box.addButton(tr("Désinstaller MySQL"),
                                     QMessageBox::DestructiveRole);
@@ -1906,7 +1917,7 @@ bool AppController::prepareCreateModeMacOS()
 
     ProgressDialog* dlg = new ProgressDialog(
         tr("Préparation du serveur…\n"
-           "Cela peut durer un moment."));
+           "Cela peut durer plusieurs minutes."));
     dlg->show();
     QApplication::processEvents();
 
@@ -2170,9 +2181,11 @@ bool AppController::askUpdateConfirmation(const QString& currentVer,
     auto* msg = new QLabel(
         tr("MySQL %1 est installé, mais la version %2 (ou ultérieure) est "
            "nécessaire.\n\n"
-           "La mise à jour va réinstaller MySQL et peut réinitialiser la base de "
-           "données existante. Sauvegardez vos données AVANT de poursuivre.\n\n"
-           "Ne confirmez que si vos données sont déjà sauvegardées.")
+           "⚠️ La mise à jour effectue un NETTOYAGE COMPLET : MySQL est entièrement "
+           "désinstallé puis réinstallé proprement. La base de données existante "
+           "sera DÉFINITIVEMENT SUPPRIMÉE.\n\n"
+           "Sauvegardez vos données AVANT de poursuivre. Ne confirmez que si elles "
+           "sont déjà sauvegardées.")
             .arg(currentVer.isEmpty() ? tr("(version inconnue)") : currentVer,
                  targetVer));
     msg->setWordWrap(true);

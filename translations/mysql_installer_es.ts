@@ -4,17 +4,17 @@
 <context>
     <name>AppController</name>
     <message>
-        <location filename="../src/appcontroller.cpp" line="2176"/>
+        <location filename="../src/appcontroller.cpp" line="2189"/>
         <source>(version inconnue)</source>
         <translation>(versión desconocida)</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="601"/>
+        <location filename="../src/appcontroller.cpp" line="611"/>
         <source>Impossible de créer l&apos;utilisateur &apos;%1&apos;.</source>
         <translation>No se puede crear el usuario &apos;%1&apos;.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/appcontroller.cpp" line="670"/>
+        <location filename="../src/appcontroller.cpp" line="680"/>
         <source>%n privilège(s) manquant(s) pour « %1 » : %2</source>
         <translation>
             <numerusform>%n privilegio faltante para &quot;%1&quot;: %2</numerusform>
@@ -22,12 +22,12 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="681"/>
+        <location filename="../src/appcontroller.cpp" line="691"/>
         <source>Paramétrage MySQL validé</source>
         <translation>Configuración MySQL validada</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="682"/>
+        <location filename="../src/appcontroller.cpp" line="692"/>
         <source>Le paramétrage de MySQL pour l&apos;utilisation de Rufus est correct.
 
 Vous pouvez maintenant procéder à l&apos;installation de Rufus.</source>
@@ -36,19 +36,40 @@ Vous pouvez maintenant procéder à l&apos;installation de Rufus.</source>
 Ahora puede proceder con la instalación de Rufus.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1045"/>
+        <location filename="../src/appcontroller.cpp" line="707"/>
+        <source>⚠️ TOUTES VOS DONNÉES SERONT DÉFINITIVEMENT PERDUES si vous continuez.
+
+Cette opération désinstalle MySQL et supprime toutes ses bases de données, y compris les données gérées par Rufus. C&apos;est IRRÉVERSIBLE.
+
+FAITES UNE SAUVEGARDE de vos données avant de poursuivre.
+
+(Le dossier partagé et les fichiers qu&apos;il contient, eux, ne sont pas supprimés.)
+
+Voulez-vous vraiment continuer ?</source>
+        <translation>⚠️ TODOS SUS DATOS SE PERDERÁN DEFINITIVAMENTE si continúa.
+
+Esta operación desinstala MySQL y elimina todas sus bases de datos, incluidos los datos gestionados por Rufus. Es IRREVERSIBLE.
+
+HAGA UNA COPIA DE SEGURIDAD de sus datos antes de continuar.
+
+(La carpeta compartida y los archivos que contiene no se eliminan.)
+
+¿Seguro que desea continuar?</translation>
+    </message>
+    <message>
+        <location filename="../src/appcontroller.cpp" line="1056"/>
         <source>Installation et configuration de MySQL…
 (Autorisez l&apos;opération dans la fenêtre qui s&apos;affiche)</source>
         <translation>Instalando y configurando MySQL…
 (Autorice la operación en la ventana que aparece)</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1337"/>
+        <location filename="../src/appcontroller.cpp" line="1348"/>
         <source>Installation de MySQL via apt-get…</source>
         <translation>Instalando MySQL mediante apt-get…</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1448"/>
+        <location filename="../src/appcontroller.cpp" line="1459"/>
         <source>Redémarrage de MySQL…</source>
         <translation>Reiniciando MySQL…</translation>
     </message>
@@ -131,45 +152,33 @@ Voulez-vous installer MySQL maintenant ?</source>
 ¿Desea instalar MySQL ahora?</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1797"/>
+        <location filename="../src/appcontroller.cpp" line="1808"/>
+        <location filename="../src/appcontroller.cpp" line="1919"/>
         <source>Préparation du serveur…
 Cela peut durer plusieurs minutes.</source>
         <translation>Preparando el servidor…
 Puede tardar varios minutos.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="2157"/>
+        <location filename="../src/appcontroller.cpp" line="2168"/>
         <source>Mise à jour de MySQL nécessaire</source>
         <translation>Actualización de MySQL necesaria</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="2171"/>
-        <source>MySQL %1 est installé, mais la version %2 (ou ultérieure) est nécessaire.
-
-La mise à jour va réinstaller MySQL et peut réinitialiser la base de données existante. Sauvegardez vos données AVANT de poursuivre.
-
-Ne confirmez que si vos données sont déjà sauvegardées.</source>
-        <translation>MySQL %1 está instalado, pero se necesita la versión %2 (o posterior).
-
-La actualización reinstalará MySQL y puede restablecer la base de datos existente. Haga una copia de seguridad de sus datos ANTES de continuar.
-
-Confirme solo si sus datos ya están respaldados.</translation>
-    </message>
-    <message>
-        <location filename="../src/appcontroller.cpp" line="2188"/>
+        <location filename="../src/appcontroller.cpp" line="2201"/>
         <source>OK, faire la MAJ, les données ont bien été sauvegardées</source>
         <translation>Aceptar, realizar la actualización, los datos ya están respaldados</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="705"/>
-        <location filename="../src/appcontroller.cpp" line="1593"/>
-        <location filename="../src/appcontroller.cpp" line="2186"/>
+        <location filename="../src/appcontroller.cpp" line="716"/>
+        <location filename="../src/appcontroller.cpp" line="1604"/>
+        <location filename="../src/appcontroller.cpp" line="2199"/>
         <source>Annuler</source>
         <translation>Cancelar</translation>
     </message>
     <message>
         <location filename="../src/appcontroller.cpp" line="430"/>
-        <location filename="../src/appcontroller.cpp" line="2426"/>
+        <location filename="../src/appcontroller.cpp" line="2439"/>
         <source>Pas d&apos;accès réseau</source>
         <translation>Sin acceso a la red</translation>
     </message>
@@ -183,7 +192,20 @@ Fermeture du programme.</source>
 El programa se cerrará.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="2427"/>
+        <location filename="../src/appcontroller.cpp" line="2182"/>
+        <source>MySQL %1 est installé, mais la version %2 (ou ultérieure) est nécessaire.
+
+⚠️ La mise à jour effectue un NETTOYAGE COMPLET : MySQL est entièrement désinstallé puis réinstallé proprement. La base de données existante sera DÉFINITIVEMENT SUPPRIMÉE.
+
+Sauvegardez vos données AVANT de poursuivre. Ne confirmez que si elles sont déjà sauvegardées.</source>
+        <translation>MySQL %1 está instalado, pero se necesita la versión %2 (o posterior).
+
+⚠️ La actualización realiza una LIMPIEZA COMPLETA: MySQL se desinstala por completo y luego se reinstala desde cero. La base de datos existente se ELIMINARÁ DEFINITIVAMENTE.
+
+Haga una copia de seguridad de sus datos ANTES de continuar. Confirme solo si ya están respaldados.</translation>
+    </message>
+    <message>
+        <location filename="../src/appcontroller.cpp" line="2440"/>
         <source>Absence d&apos;accès réseau. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
 
 Fermeture du programme.</source>
@@ -192,12 +214,12 @@ Fermeture du programme.</source>
 El programa se cerrará.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="2436"/>
+        <location filename="../src/appcontroller.cpp" line="2449"/>
         <source>Lien de téléchargement introuvable</source>
         <translation>Enlace de descarga no encontrado</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="2437"/>
+        <location filename="../src/appcontroller.cpp" line="2450"/>
         <source>Impossible de résoudre le lien de téléchargement. Le programme ne peut pas télécharger le fichier d&apos;installation de MySQL.
 
 Fermeture du programme.</source>
@@ -206,130 +228,118 @@ Fermeture du programme.</source>
 El programa se cerrará.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="560"/>
+        <location filename="../src/appcontroller.cpp" line="570"/>
         <source>MySQL %1 (ou ultérieur) n&apos;est pas détecté sur ce système.</source>
         <translation>No se detecta MySQL %1 (o posterior) en este sistema.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="582"/>
+        <location filename="../src/appcontroller.cpp" line="534"/>
+        <source>Nettoyage de l&apos;ancienne installation de MySQL…</source>
+        <translation>Limpiando la instalación anterior de MySQL…</translation>
+    </message>
+    <message>
+        <location filename="../src/appcontroller.cpp" line="592"/>
         <source>Impossible d&apos;ajouter le chemin de mysql à la variable PATH.</source>
         <translation>No se pudo añadir la ruta de mysql a la variable PATH.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="609"/>
+        <location filename="../src/appcontroller.cpp" line="619"/>
         <source>Impossible de créer ou de partager le dossier %1.</source>
         <translation>No se pudo crear o compartir la carpeta %1.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="615"/>
+        <location filename="../src/appcontroller.cpp" line="625"/>
         <source>Dossier partagé : %1</source>
         <translation>Carpeta compartida: %1</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="622"/>
+        <location filename="../src/appcontroller.cpp" line="632"/>
         <source>Impossible de configurer secure_file_priv sur %1.</source>
         <translation>No se pudo configurar secure_file_priv en %1.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="645"/>
+        <location filename="../src/appcontroller.cpp" line="655"/>
         <source>mysql ne parvient pas à écrire dans %1.
 Accordez l&apos;accès complet au disque à mysqld, ou vérifiez le privilège FILE de « %2 ».</source>
         <translation>mysql no puede escribir en %1.
 Conceda Acceso total al disco a mysqld o compruebe el privilegio FILE de «%2».</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="655"/>
+        <location filename="../src/appcontroller.cpp" line="665"/>
         <source>mysql ne parvient pas à écrire dans %1.
 Vérifiez les droits du dossier et le privilège FILE de « %2 ».</source>
         <translation>mysql no puede escribir en %1.
 Compruebe los permisos de la carpeta y el privilegio FILE de «%2».</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="696"/>
+        <location filename="../src/appcontroller.cpp" line="706"/>
         <source>Désinstaller MySQL ?</source>
         <translation>¿Desinstalar MySQL?</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="697"/>
-        <source>Cette opération va DÉSINSTALLER MySQL et SUPPRIMER toutes ses bases de données, y compris les données gérées par Rufus.
-
-C&apos;est IRRÉVERSIBLE : assurez-vous d&apos;avoir une sauvegarde.
-
-(Le dossier partagé et les fichiers qu&apos;il contient ne sont pas supprimés.)
-
-Voulez-vous continuer ?</source>
-        <translation>Esta operación DESINSTALARÁ MySQL y ELIMINARÁ todas sus bases de datos, incluidos los datos gestionados por Rufus.
-
-Es IRREVERSIBLE: asegúrese de tener una copia de seguridad.
-
-(La carpeta compartida y los archivos que contiene no se eliminan.)
-
-¿Desea continuar?</translation>
-    </message>
-    <message>
-        <location filename="../src/appcontroller.cpp" line="703"/>
+        <location filename="../src/appcontroller.cpp" line="714"/>
         <source>Désinstaller MySQL</source>
         <translation>Desinstalar MySQL</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="712"/>
+        <location filename="../src/appcontroller.cpp" line="723"/>
         <source>Désinstallation de MySQL en cours…</source>
         <translation>Desinstalando MySQL…</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="722"/>
+        <location filename="../src/appcontroller.cpp" line="733"/>
         <source>Désinstallation terminée</source>
         <translation>Desinstalación finalizada</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="723"/>
+        <location filename="../src/appcontroller.cpp" line="734"/>
         <source>MySQL a été désinstallé de cet ordinateur.</source>
         <translation>MySQL se ha desinstalado de este equipo.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="727"/>
+        <location filename="../src/appcontroller.cpp" line="738"/>
         <source>Désinstallation incomplète</source>
         <translation>Desinstalación incompleta</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="728"/>
+        <location filename="../src/appcontroller.cpp" line="739"/>
         <source>La désinstallation de MySQL n&apos;a pas pu être menée à son terme.</source>
         <translation>No se pudo completar la desinstalación de MySQL.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="988"/>
+        <location filename="../src/appcontroller.cpp" line="999"/>
         <source>Téléchargement de MySQL %1 (Oracle)…</source>
         <translation>Descargando MySQL %1 (Oracle)…</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1192"/>
+        <location filename="../src/appcontroller.cpp" line="1203"/>
         <source>Téléchargement de MySQL %1…</source>
         <translation>Descargando MySQL %1…</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1195"/>
+        <location filename="../src/appcontroller.cpp" line="1206"/>
         <source>Téléchargement échoué</source>
         <translation>Error de descarga</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1196"/>
+        <location filename="../src/appcontroller.cpp" line="1207"/>
         <source>Impossible de télécharger MySQL %1 depuis dev.mysql.com.
 Vérifiez votre connexion Internet.</source>
         <translation>No se puede descargar MySQL %1 desde dev.mysql.com.
 Compruebe su conexión a Internet.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1252"/>
+        <location filename="../src/appcontroller.cpp" line="1263"/>
         <source>Extraction des fichiers MySQL…</source>
         <translation>Extrayendo los archivos de MySQL…</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1261"/>
+        <location filename="../src/appcontroller.cpp" line="1272"/>
         <source>Extraction échouée</source>
         <translation>Error de extracción</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1262"/>
+        <location filename="../src/appcontroller.cpp" line="1273"/>
         <source>L&apos;archive MySQL n&apos;a pas pu être extraite (mysqld.exe introuvable).
 
 Détail : %1</source>
@@ -338,34 +348,34 @@ Détail : %1</source>
 Detalles: %1</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1263"/>
+        <location filename="../src/appcontroller.cpp" line="1274"/>
         <source>(aucun détail)</source>
         <translation>(sin detalles)</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1273"/>
+        <location filename="../src/appcontroller.cpp" line="1284"/>
         <source>Configuration échouée</source>
         <translation>Error de configuración</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1274"/>
+        <location filename="../src/appcontroller.cpp" line="1285"/>
         <source>Impossible d&apos;écrire %1.</source>
         <translation>No se puede escribir %1.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1287"/>
+        <location filename="../src/appcontroller.cpp" line="1298"/>
         <source>Initialisation de la base de données,
 cela peut prendre quelques instants…</source>
         <translation>Inicializando la base de datos,
 esto puede tardar unos instantes…</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1290"/>
+        <location filename="../src/appcontroller.cpp" line="1301"/>
         <source>Initialisation échouée</source>
         <translation>Error de inicialización</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1291"/>
+        <location filename="../src/appcontroller.cpp" line="1302"/>
         <source>L&apos;initialisation du datadir MySQL a échoué.
 
 %1</source>
@@ -374,22 +384,22 @@ esto puede tardar unos instantes…</translation>
 %1</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1302"/>
+        <location filename="../src/appcontroller.cpp" line="1313"/>
         <source>Installation incomplète</source>
         <translation>Instalación incompleta</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1303"/>
+        <location filename="../src/appcontroller.cpp" line="1314"/>
         <source>Les fichiers MySQL sont en place mais l&apos;installation n&apos;est pas détectée correctement.</source>
         <translation>Los archivos de MySQL están en su lugar, pero la instalación no se detecta correctamente.</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1308"/>
+        <location filename="../src/appcontroller.cpp" line="1319"/>
         <source>Démarrage du service échoué</source>
         <translation>Error al iniciar el servicio</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1309"/>
+        <location filename="../src/appcontroller.cpp" line="1320"/>
         <source>MySQL est installé mais le service n&apos;a pas démarré.
 
 %1</source>
@@ -398,12 +408,12 @@ esto puede tardar unos instantes…</translation>
 %1</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1354"/>
+        <location filename="../src/appcontroller.cpp" line="1365"/>
         <source>Initialisation impossible</source>
         <translation>Error de inicialización</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1355"/>
+        <location filename="../src/appcontroller.cpp" line="1366"/>
         <source>MySQL est installé mais la base de données n&apos;a pas pu être initialisée (%1/data).
 
 Le serveur ne peut pas démarrer.
@@ -418,34 +428,27 @@ Detalle (%2):
 %3</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1359"/>
+        <location filename="../src/appcontroller.cpp" line="1370"/>
         <source>(journal indisponible)</source>
         <translation>(registro no disponible)</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1908"/>
-        <source>Préparation du serveur…
-Cela peut durer un moment.</source>
-        <translation>Preparando el servidor…
-Puede tardar un momento.</translation>
-    </message>
-    <message>
-        <location filename="../src/appcontroller.cpp" line="2135"/>
+        <location filename="../src/appcontroller.cpp" line="2146"/>
         <source>Non</source>
         <translation>No</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="2136"/>
+        <location filename="../src/appcontroller.cpp" line="2147"/>
         <source>Oui</source>
         <translation>Sí</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1575"/>
+        <location filename="../src/appcontroller.cpp" line="1586"/>
         <source>Accès complet au disque requis pour mysqld</source>
         <translation>Se requiere Acceso total al disco para mysqld</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1576"/>
+        <location filename="../src/appcontroller.cpp" line="1587"/>
         <source>mysqld ne parvient pas à écrire dans /Users/Shared. Sur macOS, un démon doit disposer de l&apos;« Accès complet au disque » pour y accéder.
 
 Pour l&apos;autoriser :
@@ -470,17 +473,17 @@ Para concederlo:
   5. Vuelva aquí y haga clic en «Reintentar».</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1589"/>
+        <location filename="../src/appcontroller.cpp" line="1600"/>
         <source>Ouvrir les Réglages Système</source>
         <translation>Abrir Ajustes del Sistema</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="1591"/>
+        <location filename="../src/appcontroller.cpp" line="1602"/>
         <source>Réessayer</source>
         <translation>Reintentar</translation>
     </message>
     <message>
-        <location filename="../src/appcontroller.cpp" line="636"/>
+        <location filename="../src/appcontroller.cpp" line="646"/>
         <source>Connexion impossible avec le login « %1 ».
 Vérifiez le login et le mot de passe.</source>
         <translation>No se puede conectar con el usuario &quot;%1&quot;.
