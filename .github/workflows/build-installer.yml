@@ -1,10 +1,10 @@
-name: Build Installers (Windows + Linux)
+name: Build Installers (Windows + Linux + macOS)
 
 # Déclenché :
 #   • automatiquement quand tu pousses un tag  v1.0 / v1.1 / etc.
 #   • manuellement depuis l'onglet "Actions" (bouton "Run workflow") : renseigne
-#     "release_tag" (ex. v1.2) pour publier une Release avec les DEUX paquets
-#     (Windows .exe + Linux .AppImage). Vide = build seul (artefacts seulement).
+#     "release_tag" (ex. v1.2) pour publier une Release avec les TROIS paquets
+#     (Windows .exe + Linux .AppImage + macOS .dmg). Vide = build seul (artefacts).
 on:
   push:
     tags:
@@ -127,10 +127,60 @@ jobs:
           if-no-files-found: error
 
   # ===========================================================================
-  #  Release : publie les DEUX paquets ensemble (sur tag ou release_tag)
+  #  macOS : application UNIVERSELLE (arm64 + x86_64) + DMG
+  #  Le Qt officiel macOS est universel, donc un seul build produit un binaire
+  #  qui tourne sur Mac Intel ET Apple Silicon → un seul .dmg pour tous.
+  # ===========================================================================
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.*'
+          host: 'mac'
+          target: 'desktop'
+          arch: 'clang_64'
+          cache: true
+
+      - name: Build universal app + DMG
+        run: |
+          set -e
+          QT_BIN="$QT_ROOT_DIR/bin"
+          mkdir -p build-macos && cd build-macos
+          # QMAKE_APPLE_DEVICE_ARCHS : compile les deux tranches en une passe.
+          "$QT_BIN/qmake" ../MySQLInstaller.pro CONFIG+=release \
+              QMAKE_APPLE_DEVICE_ARCHS="x86_64 arm64"
+          make -j"$(sysctl -n hw.logicalcpu)"
+          # macdeployqt embarque les frameworks Qt (universels) dans le .app.
+          "$QT_BIN/macdeployqt" MySQLInstaller.app -always-overwrite
+          echo "Architectures du binaire :"
+          lipo -archs MySQLInstaller.app/Contents/MacOS/MySQLInstaller
+          cd ..
+          # Génération du DMG (dossier de staging + lien /Applications).
+          mkdir -p dist
+          STAGE="$(mktemp -d)"
+          cp -R build-macos/MySQLInstaller.app "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "MySQL Installer" -srcfolder "$STAGE" \
+                         -ov -format UDZO dist/MySQLInstaller_macOS_Universal.dmg
+          rm -rf "$STAGE"
+
+      - name: Upload macOS DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/MySQLInstaller_macOS_Universal.dmg
+          if-no-files-found: error
+
+  # ===========================================================================
+  #  Release : publie les TROIS paquets ensemble (sur tag ou release_tag)
   # ===========================================================================
   release:
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-macos]
     if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
     runs-on: ubuntu-latest
     steps:
@@ -146,6 +196,12 @@ jobs:
           name: linux-appimage
           path: artifacts
 
+      - name: Download macOS DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: artifacts
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -155,6 +211,7 @@ jobs:
             artifacts/MySQLInstallerForRufusSetup.exe
             artifacts/*.AppImage
             artifacts/install_appimage.sh
+            artifacts/*.dmg
           body: |
             ## MySQL Installer for Rufus ${{ inputs.release_tag != '' && inputs.release_tag || github.ref_name }}
 
@@ -172,3 +229,12 @@ jobs:
               `./install_appimage.sh` — l'app apparaît dans le menu (désinstaller :
               `./install_appimage.sh --uninstall`).
             > L'application demande le mot de passe via pkexec au besoin.
+
+            ### macOS (Intel + Apple Silicon)
+            Ouvrez `MySQLInstaller_macOS_Universal.dmg` (binaire **universel**,
+            valable sur Mac Intel et Apple Silicon) puis glissez l'application dans
+            **Applications**.
+            > ⚠️ Application non signée (pas de Developer ID) : au 1ᵉʳ lancement,
+            > clic droit sur l'app → « Ouvrir » → « Ouvrir », ou Réglages Système ▸
+            > Confidentialité et sécurité ▸ « Ouvrir quand même ».
+            > L'application demande le mot de passe administrateur au besoin.
