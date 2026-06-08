@@ -122,13 +122,11 @@ APPIMAGE="$(ls -t "$BUILD"/*.AppImage 2>/dev/null \
             | grep -vE 'linuxdeploy' | head -1 || true)"
 if [ -n "$APPIMAGE" ]; then
     mv -f "$APPIMAGE" "$ROOT/dist/"
-    # Joindre l'installeur (intégration au menu) à côté de l'AppImage.
-    cp "$ROOT/install_appimage.sh" "$ROOT/dist/"
-    chmod +x "$ROOT/dist/install_appimage.sh"
     echo
     echo "✅ AppImage prête : dist/$(basename "$APPIMAGE")"
-    echo "   Lancement direct : chmod +x puis ./dist/*.AppImage"
-    echo "   Installation (menu + icône) : ./dist/install_appimage.sh"
+    echo "   Lancement direct       : chmod +x puis ./dist/*.AppImage"
+    echo "   Installation (menu)     : ./dist/*.AppImage --install   (équivalent setup.exe)"
+    echo "   Désinstallation (menu)  : ./dist/*.AppImage --uninstall"
     echo "   Rappel : l'application demande le mot de passe via pkexec au besoin."
 else
     echo "⚠️  Aucune AppImage produite — voir la sortie de linuxdeploy ci-dessus." >&2
