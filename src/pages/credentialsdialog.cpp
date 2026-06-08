@@ -177,7 +177,23 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
     okWrapLay->addWidget(m_okBtn);
     m_okWrap->installEventFilter(this);
 
+    // Bouton « Désinstaller MySQL » : à gauche, contre le bord, SÉPARÉ du bloc
+    // Fermer/Vérifier (un addStretch les éloigne). N'apparaît qu'en mode Verify
+    // (MySQL présent → quelque chose à désinstaller). Style discret « danger ».
+    m_uninstallBtn = new QPushButton();
+    m_uninstallBtn->setAutoDefault(false);
+    m_uninstallBtn->setStyleSheet(R"(
+        QPushButton {
+            background: transparent; color: #B23B3B;
+            border: 1px solid #D9A0A0; border-radius: 8px;
+            padding: 8px 16px; font-size: 13px;
+        }
+        QPushButton:hover { background: #FBEAEA; }
+    )");
+    m_uninstallBtn->setVisible(m_mode == Mode::Verify);
+
     auto* buttonRow = new QHBoxLayout();
+    buttonRow->addWidget(m_uninstallBtn);
     buttonRow->addStretch();
     buttonRow->addWidget(m_cancelBtn);
     buttonRow->addWidget(m_okWrap);
@@ -185,6 +201,8 @@ CredentialsDialog::CredentialsDialog(Mode mode, QWidget* parent)
 
     connect(m_okBtn,     &QPushButton::clicked, this, &CredentialsDialog::onConfirmClicked);
     connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+    connect(m_uninstallBtn, &QPushButton::clicked,
+            this, &CredentialsDialog::uninstallRequested);
 
     // Validité en temps réel : (dé)active le bouton + cadre de la confirmation.
     connect(m_login,    &QLineEdit::textChanged, this, [this]{ onInputsChanged(); });
@@ -221,6 +239,8 @@ void CredentialsDialog::setMode(Mode mode)
     const bool create = (mode == Mode::Create);
     m_confirmLabel->setVisible(create);
     m_confirm->setVisible(create);
+    // « Désinstaller MySQL » : pertinent uniquement en mode Verify (MySQL présent).
+    m_uninstallBtn->setVisible(!create);
     retranslateUi();
     onInputsChanged();    // critères/cadre dépendent du mode
     adjustSize();
@@ -295,7 +315,8 @@ void CredentialsDialog::retranslateUi()
     m_okBtn->setText(m_mode == Mode::Create
         ? tr("Créer le compte")
         : tr("Vérifier"));
-    m_cancelBtn->setText(tr("Annuler"));
+    m_cancelBtn->setText(tr("Fermer"));
+    m_uninstallBtn->setText(tr("Désinstaller MySQL"));
 
     adjustSize();
 }

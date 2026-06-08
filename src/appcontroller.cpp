@@ -442,6 +442,8 @@ void AppController::run()
     m_dialog = new CredentialsDialog(CredentialsDialog::Mode::Verify);
     connect(m_dialog, &CredentialsDialog::credentialsAccepted,
             this,     &AppController::onCredentialsAccepted);
+    connect(m_dialog, &CredentialsDialog::uninstallRequested,
+            this,     &AppController::onUninstallRequested);
     connect(m_dialog, &QDialog::rejected,
             qApp,     &QApplication::quit);
     m_dialog->setInputsEnabled(false);     // verrouillé tant que MySQL non confirmé
@@ -682,6 +684,123 @@ void AppController::onCredentialsAccepted()
 
     m_dialog->accept();
     qApp->quit();
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  onUninstallRequested() : bouton « Désinstaller MySQL » (mode Verify)
+// ═════════════════════════════════════════════════════════════════════════════
+void AppController::onUninstallRequested()
+{
+    // Avertissement fort : opération destructive (supprime les bases MySQL).
+    QMessageBox box(QMessageBox::Warning,
+        tr("Désinstaller MySQL ?"),
+        tr("Cette opération va DÉSINSTALLER MySQL et SUPPRIMER toutes ses bases de "
+           "données, y compris les données gérées par Rufus.\n\n"
+           "C'est IRRÉVERSIBLE : assurez-vous d'avoir une sauvegarde.\n\n"
+           "(Le dossier partagé et les fichiers qu'il contient ne sont pas "
+           "supprimés.)\n\nVoulez-vous continuer ?"),
+        QMessageBox::NoButton, m_dialog);
+    QPushButton* go = box.addButton(tr("Désinstaller MySQL"),
+                                    QMessageBox::DestructiveRole);
+    box.addButton(tr("Annuler"), QMessageBox::RejectRole);
+    box.exec();
+    if (box.clickedButton() != go)
+        return;
+
+    m_dialog->setInputsEnabled(false);
+    ProgressDialog* dlg = new ProgressDialog(
+        tr("Désinstallation de MySQL en cours…"));
+    dlg->show();
+    QApplication::processEvents();
+
+    const bool ok = uninstallMySQL();
+
+    dlg->close();
+    delete dlg;
+
+    if (ok && !isMySQLInstalled()) {
+        QMessageBox::information(m_dialog, tr("Désinstallation terminée"),
+            tr("MySQL a été désinstallé de cet ordinateur."));
+        m_dialog->accept();
+        qApp->quit();
+    } else {
+        QMessageBox::warning(m_dialog, tr("Désinstallation incomplète"),
+            tr("La désinstallation de MySQL n'a pas pu être menée à son terme."));
+        m_dialog->setInputsEnabled(true);
+    }
+}
+
+// Désinstalle MySQL et la configuration ajoutée par l'outil. NON destructif pour
+// le dossier partagé /Users/Shared (susceptible de contenir les données de
+// l'utilisateur). Une seule élévation par plateforme.
+bool AppController::uninstallMySQL()
+{
+#if defined(Q_OS_WIN)
+    // L'application tourne déjà en administrateur : arrêt + suppression du service,
+    // des dossiers (binaires + données), de l'entrée PATH et de la clé de registre.
+    const QString base = "C:/Program Files/MySQL/MySQL Server 8.4";
+    const QString prog = "C:/ProgramData/MySQL/MySQL Server 8.4";
+    const QString bin  = QDir::toNativeSeparators(base + "/bin");
+    const QString ps =
+        "$ErrorActionPreference='SilentlyContinue';"
+        "net stop MySQL;"
+        "sc.exe delete MySQL;"
+        "$bin='" + bin + "';"
+        "$p=[Environment]::GetEnvironmentVariable('Path','Machine');"
+        "if($p){[Environment]::SetEnvironmentVariable('Path',"
+        "(($p -split ';' | Where-Object {$_ -and $_ -ne $bin}) -join ';'),'Machine')};"
+        "Remove-Item -LiteralPath '" + QDir::toNativeSeparators(base) + "' -Recurse -Force;"
+        "Remove-Item -LiteralPath '" + QDir::toNativeSeparators(prog) + "' -Recurse -Force;"
+        "Remove-Item -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion"
+        "\\Uninstall\\MySQLForRufus' -Recurse -Force";
+    runCmdFull("powershell -NoProfile -ExecutionPolicy Bypass -Command \"" + ps + "\"",
+               300000);
+    return !isMySQLInstalled();
+#elif defined(Q_OS_LINUX)
+    // apt purge (par motif individuel) + suppression données/config. On RETIRE le
+    // partage [Rufus] de Samba mais on NE purge PAS samba/wsdd ni le dossier
+    // partagé (l'utilisateur peut s'en servir par ailleurs).
+    const QString script =
+        "systemctl stop mysql mysqld mariadb 2>/dev/null;"
+        "for pat in 'mysql-server.*' 'mysql-client.*' 'libmysqlclient.*' "
+                   "'mysql-common' 'mysql.*' 'mariadb.*'; do "
+          "DEBIAN_FRONTEND=noninteractive apt-get purge -y \"$pat\" 2>/dev/null || true; "
+        "done;"
+        "DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge 2>/dev/null || true;"
+        "rm -rf /etc/mysql /var/lib/mysql /var/log/mysql /var/lib/mysql-files "
+               "/var/lib/mysql-keyring;"
+        "rm -f /etc/profile.d/mysql.sh;"
+        "rm -f /etc/apparmor.d/disable/usr.sbin.mysqld;"
+        "[ -f /etc/apparmor.d/usr.sbin.mysqld ] && "
+          "apparmor_parser -r /etc/apparmor.d/usr.sbin.mysqld 2>/dev/null;"
+        "systemctl reload apparmor 2>/dev/null || true;"
+        "ufw delete allow 3306 2>/dev/null || true;"
+        "SMB=/etc/samba/smb.conf; if [ -f \"$SMB\" ]; then "
+          "sed -i '/^\\[Rufus\\]/,/^\\[/ { /^\\[Rufus\\]/d; /^\\[/!d }' \"$SMB\";"
+          "sed -i '/server min protocol = NT1/d' \"$SMB\";"
+          "systemctl restart smbd 2>/dev/null || true; "
+        "fi";
+    runCmdElevated(script);
+    return !isMySQLInstalled();
+#else
+    // macOS (installeur Oracle .dmg) : arrêt du démon, suppression du pkg (toutes
+    // versions via glob), config et reçus pkgutil. Le compte système _mysql (natif
+    // à macOS) est conservé.
+    const QString script =
+        "launchctl bootout system "
+          "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist 2>/dev/null || "
+        "launchctl unload -w "
+          "/Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist 2>/dev/null;"
+        "pkill -f /usr/local/mysql/bin/mysqld 2>/dev/null; sleep 2;"
+        "rm -f /Library/LaunchDaemons/com.oracle.oss.mysql.mysqld.plist;"
+        "rm -rf /Library/PreferencePanes/MySQL.prefPane;"
+        "rm -rf /usr/local/mysql /usr/local/mysql-*;"   // symlink + dossier(s) versionné(s)
+        "rm -f /etc/my.cnf /etc/paths.d/mysql /tmp/mysql.sock /tmp/mysql.sock.lock;"
+        "for p in com.mysql.launchd com.mysql.mysql com.mysql.prefpane "
+                 "com.oracle.oss.mysql.mysqld; do pkgutil --forget \"$p\" 2>/dev/null; done";
+    runCmdElevated(script);
+    return !isMySQLInstalled();
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

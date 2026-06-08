@@ -31,6 +31,7 @@ public:
 
 signals:
     void credentialsAccepted();
+    void uninstallRequested();      // bouton « Désinstaller MySQL » (mode Verify)
 
 protected:
     void changeEvent(QEvent* event) override;
@@ -60,6 +61,7 @@ private:
     QPushButton* m_okBtn;
     QWidget*     m_okWrap = nullptr;     // conteneur du bouton (survol si désactivé)
     QPushButton* m_cancelBtn;
+    QPushButton* m_uninstallBtn = nullptr;  // « Désinstaller MySQL » (bas gauche, Verify)
     UpCheckBox*  m_steps[6];
     QString      m_stepDetail[6];       // libellé révélé par étape (ex. chemin)
     QString      m_minVersion = "8.4.3";  // seuil affiché (case 0) ; repli par défaut

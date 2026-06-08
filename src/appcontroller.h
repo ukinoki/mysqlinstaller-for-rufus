@@ -21,6 +21,7 @@ public:
 public slots:
     void run();
     void onCredentialsAccepted();
+    void onUninstallRequested();    // bouton « Désinstaller MySQL » (mode Verify)
 
 private:
     QString             m_login;
@@ -55,6 +56,7 @@ private:
     bool    ensureMysqlInPath();         // chemin de mysql présent dans PATH (sinon l'ajoute)
     QString getMySQLVersion();
     bool    installMySQL();
+    bool    uninstallMySQL();        // désinstalle MySQL + config Rufus (3 plateformes)
     bool    installFromDmg(const QString& dmgPath);
     QString downloadOracleDmg();
     //  macOS : initialise /usr/local/mysql/data si le pkg Oracle ne l'a pas fait
