@@ -2286,9 +2286,17 @@ bool AppController::runCmdElevated(const QString& cmd, const QString& stdinData)
     s.close();
     runCmd("chmod +x '" + scriptPath + "'");
 
+    // Timeout LARGE (15 min) : l'invite de mot de passe administrateur est
+    // interactive. Avec le défaut de runCmdFull (30 s), si l'invite tardait à
+    // s'afficher ou que la saisie du mot de passe + l'opération dépassaient
+    // 30 s, waitProcessResponsive tuait osascript EN PLEIN MILIEU : la sortie
+    // vide ne contenant ni « User canceled » ni « execution error », on
+    // renvoyait « succès » à tort alors que le script (ex. désinstallation)
+    // n'avait pas fini de s'exécuter — d'où « MySQL toujours présent » malgré
+    // le message de confirmation.
     const QString out = runCmdFull(QString(
         "osascript -e 'do shell script \"%1\" with administrator privileges' 2>&1")
-        .arg(scriptPath));
+        .arg(scriptPath), 900000);
     QFile::remove(scriptPath);
 
     // Succès = l'utilisateur n'a pas annulé l'invite et osascript n'a pas échoué.
